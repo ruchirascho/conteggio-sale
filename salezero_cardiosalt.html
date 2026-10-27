@@ -1,0 +1,3027 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>SaleZero / CardioSalt — App Sale, Pressione & Terapia</title>
+
+    <!-- PWA & Mobile App Meta Tags -->
+    <meta name="theme-color" content="#e11d48" id="metaThemeColor">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SaleZero">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="description" content="App rapida per controllare sale, sodio, pressione arteriosa e promemoria pastiglia serale.">
+
+    <!-- Dynamic App Icons & Manifest (injected via JS on boot) -->
+    <link id="appFavicon" rel="icon" type="image/svg+xml" href="">
+    <link id="appleTouchIcon" rel="apple-touch-icon" href="">
+    <link id="pwaManifestLink" rel="manifest" href="">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Smooth circular gauge animation */
+        .gauge-ring {
+            transition: stroke-dashoffset 0.55s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.35s ease;
+        }
+
+        /* Custom scrollbar for horizontal pills */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Tactile button press effect for 1-Tap food cards */
+        .tap-card {
+            transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+        .tap-card:active {
+            transform: scale(0.95);
+        }
+
+        /* Pulse animation on add */
+        @keyframes popScale {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.07); }
+            100% { transform: scale(1); }
+        }
+        .animate-pop {
+            animation: popScale 0.28s ease-out;
+        }
+
+        /* Urgent bedtime pill glow */
+        @keyframes urgentPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.45); }
+            50% { box-shadow: 0 0 0 10px rgba(244, 63, 94, 0); }
+        }
+        .bedtime-urgent {
+            animation: urgentPulse 2s infinite;
+        }
+
+        /* Breathing circle for BP timer */
+        @keyframes breatheRing {
+            0%, 100% { transform: scale(0.92); opacity: 0.75; }
+            50% { transform: scale(1.08); opacity: 1; }
+        }
+        .breathe-anim {
+            animation: breatheRing 4s ease-in-out infinite;
+        }
+
+        /* Print styling for Doctor Report */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                background: white !important;
+                color: black !important;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-28 bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200 selection:bg-sky-100 selection:text-sky-900">
+
+    <!-- ================= URGENT BEDTIME PILL STICKY BANNER ================= -->
+    <div id="urgentPillBanner" class="hidden sticky top-0 z-50 bg-gradient-to-r from-indigo-900 via-rose-900 to-slate-900 text-white px-3.5 py-3 shadow-xl border-b border-rose-500/40 no-print">
+        <div class="max-w-xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div class="flex items-start sm:items-center gap-2.5">
+                <div class="w-9 h-9 rounded-2xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center shrink-0 bedtime-urgent">
+                    <span class="text-lg">🌙</span>
+                </div>
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500 text-white">Promemoria Pre-Sonno</span>
+                        <span id="urgentBannerTime" class="text-xs font-bold text-rose-200">22:30</span>
+                    </div>
+                    <p id="urgentBannerTitle" class="text-xs sm:text-sm font-extrabold text-white mt-0.5">
+                        Ricordati la pastiglia prima di andare a letto!
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <button onclick="takePillNow('evening')" class="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/25 transition">
+                    <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                    <span>Presa Ora ✅</span>
+                </button>
+                <button onclick="snoozePillReminder(15)" class="px-2.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-xs flex items-center gap-1 border border-white/15 transition">
+                    <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+                    <span>+15m</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= TOP HEADER ================= -->
+    <header class="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-sm no-print">
+        <div class="max-w-xl mx-auto px-3.5 py-2.5 flex items-center justify-between gap-1.5">
+            <!-- Brand -->
+            <div class="flex items-center gap-2">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white shadow-md shadow-rose-500/20 shrink-0">
+                    <i data-lucide="heart-pulse" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <h1 class="font-extrabold text-base sm:text-lg tracking-tight text-slate-900 dark:text-white leading-none">SaleZero</h1>
+                        <span class="hidden xs:inline-block text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800">PWA</span>
+                    </div>
+                    <p class="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">Sale, Pressione & Terapia</p>
+                </div>
+            </div>
+
+            <!-- Right Actions: Undo + Date + Phone Install + Dark Mode -->
+            <div class="flex items-center gap-1 sm:gap-1.5">
+                <!-- Persistent Quick Undo Button -->
+                <button id="headerUndoBtn" onclick="undoLastAction()" class="hidden items-center gap-1 px-2 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/80 hover:bg-amber-100 active:scale-95 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-bold transition shadow-xs" title="Annulla ultimo inserimento">
+                    <i data-lucide="undo-2" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Annulla</span>
+                </button>
+
+                <!-- Date Navigation Pill -->
+                <div class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl p-0.5 border border-slate-200/70 dark:border-slate-700">
+                    <button onclick="changeDate(-1)" class="p-1.5 rounded-lg hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 active:scale-90 transition" aria-label="Giorno precedente">
+                        <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i>
+                    </button>
+                    <button onclick="resetToToday()" id="currentDateLabel" class="px-1.5 py-1 text-[11px] sm:text-xs font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap hover:text-sky-600 transition">
+                        Oggi
+                    </button>
+                    <button id="nextDayBtn" onclick="changeDate(1)" class="p-1.5 rounded-lg hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 active:scale-90 transition disabled:opacity-30" aria-label="Giorno successivo">
+                        <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+
+                <!-- Install on Phone / Backup Modal Button -->
+                <button onclick="openPwaModal()" class="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/70 text-sky-600 dark:text-sky-400 border border-sky-200/80 dark:border-sky-800/80 hover:bg-sky-100 active:scale-95 transition" title="Installa su Telefono & Backup">
+                    <i data-lucide="smartphone" class="w-4 h-4"></i>
+                </button>
+
+                <!-- Dark Mode Button (great for bedtime pill checking) -->
+                <button onclick="toggleDarkMode()" class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-amber-400 border border-slate-200/70 dark:border-slate-700 active:scale-95 transition" title="Tema Chiaro / Scuro Notturno">
+                    <i id="themeIcon" data-lucide="moon" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ================= MAIN CONTAINER ================= -->
+    <main class="max-w-xl mx-auto px-3.5 pt-3 space-y-4">
+
+        <!-- ================================================================= -->
+        <!-- TAB 1: OGGI (TERAPIA SERALE + SEMAFORO + 1-TAP + SCUDO POTASSIO)  -->
+        <!-- ================================================================= -->
+        <section id="tab-oggi" class="space-y-4">
+
+            <!-- 1. CENTRO TERAPIA & PROMEMORIA PASTIGLIA DELLA SERA (PRIMA DI DORMIRE) -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-800 flex items-center justify-center shrink-0">
+                            <i data-lucide="pill" class="w-4 h-4"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-sm font-extrabold text-slate-900 dark:text-white leading-tight flex items-center gap-1.5">
+                                <span>Terapia & Pastiglia della Sera</span>
+                            </h2>
+                            <p id="medScheduleSubtitle" class="text-[11px] text-slate-500 dark:text-slate-400">
+                                Promemoria pre-sonno ore 22:30
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="openTherapyModal()" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-bold active:scale-95 transition">
+                            <i data-lucide="bell" class="w-3.5 h-3.5 text-indigo-500"></i>
+                            <span>Orario & Sveglia</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Pill Slots Grid (Evening Bedtime Pill + Optional Morning Pill) -->
+                <div id="pillSlotsContainer" class="grid grid-cols-1 gap-2">
+                    <!-- Populated dynamically by renderTherapyCard() -->
+                </div>
+
+                <!-- 7-Day Adherence Dots + Quick Calendar Alarm Link -->
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ultimi 7gg:</span>
+                        <div id="adherenceDotsRow" class="flex items-center gap-1">
+                            <!-- 7 day dots -->
+                        </div>
+                    </div>
+
+                    <button onclick="downloadMedicationICS()" class="inline-flex items-center gap-1 text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 hover:underline">
+                        <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+                        <span>Attiva Sveglia Telefono (.ics)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. DASHBOARD PRINCIPALE & INDICATORE SEMAFORICO -->
+            <div id="dashboardCard" class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 transition-colors duration-300 relative overflow-hidden">
+                
+                <!-- Top row: Limit Selector + Status Badge -->
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Limite:</span>
+                        <select id="limitSelector" onchange="handleLimitChange(this.value)" aria-label="Seleziona limite giornaliero di sale" class="text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/70 text-slate-800 dark:text-slate-100 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer">
+                            <option value="3.75">Ipertensione Stretto (3.75g / 1500mg)</option>
+                            <option value="5.0">Standard OMS (5.0g / 2000mg)</option>
+                            <option value="custom">Personalizzato...</option>
+                        </select>
+                    </div>
+
+                    <div id="trafficBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span id="trafficDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span id="trafficText">Zona Sicura</span>
+                    </div>
+                </div>
+
+                <!-- Custom limit inline box -->
+                <div id="customLimitBox" class="hidden mb-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+                    <label for="customLimitInput" class="text-xs font-bold text-slate-700 dark:text-slate-200">Limite Sale (grammi/giorno):</label>
+                    <div class="flex items-center gap-1.5">
+                        <input id="customLimitInput" type="number" step="0.25" min="0.5" max="15" value="3.75" class="w-20 px-2.5 py-1 text-sm font-bold text-center rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                        <button onclick="saveCustomLimit()" class="px-3 py-1 rounded-xl bg-sky-600 text-white text-xs font-bold hover:bg-sky-700 active:scale-95 transition">Salva</button>
+                    </div>
+                </div>
+
+                <!-- Center Gauge & Key Metrics -->
+                <div class="grid grid-cols-12 items-center gap-3 sm:gap-4 my-1">
+                    <!-- Circular Ring Gauge -->
+                    <div class="col-span-5 flex flex-col items-center justify-center relative">
+                        <div class="relative w-32 h-32 sm:w-36 sm:h-36 flex items-center justify-center">
+                            <svg class="w-full h-full -rotate-90 transform" viewBox="0 0 120 120">
+                                <!-- Background Track -->
+                                <circle cx="60" cy="60" r="50" class="stroke-slate-100 dark:stroke-slate-800" stroke-width="11" fill="transparent" />
+                                <!-- Dynamic Progress Ring -->
+                                <circle id="gaugeRing" cx="60" cy="60" r="50" stroke="#10b981" stroke-width="11" stroke-dasharray="314.16" stroke-dashoffset="314.16" stroke-linecap="round" fill="transparent" class="gauge-ring" />
+                            </svg>
+                            <!-- Center Value inside Ring -->
+                            <div id="gaugeCenterText" class="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Sale Oggi</span>
+                                <div class="flex items-baseline justify-center leading-none mt-0.5">
+                                    <span id="saltGramsDisplay" class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">0.0</span>
+                                    <span class="text-xs font-extrabold text-slate-500 ml-0.5">g</span>
+                                </div>
+                                <span id="saltPercentDisplay" class="text-[11px] font-bold text-emerald-600 mt-1">0% del limite</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Breakdown Details -->
+                    <div class="col-span-7 space-y-2.5">
+                        <!-- Sodium Equivalent Card -->
+                        <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-between">
+                            <div>
+                                <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block">Sodio Equivalente</span>
+                                <div class="flex items-baseline gap-1 mt-0.5">
+                                    <span id="sodiumMgDisplay" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">0</span>
+                                    <span class="text-xs font-bold text-slate-500">mg</span>
+                                    <span id="sodiumLimitDisplay" class="text-[11px] text-slate-400 font-medium">/ 1500 mg</span>
+                                </div>
+                            </div>
+                            <div class="w-8 h-8 rounded-xl bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-400 flex items-center justify-center font-black text-xs shrink-0">
+                                Na
+                            </div>
+                        </div>
+
+                        <!-- Remaining Allowance Card -->
+                        <div id="remainingBox" class="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/70 flex items-center justify-between">
+                            <div>
+                                <span id="remainingLabel" class="text-[11px] font-semibold text-emerald-800 block">Margine Rimanente</span>
+                                <div class="flex items-baseline gap-1 mt-0.5">
+                                    <span id="remainingSaltDisplay" class="text-base sm:text-lg font-extrabold text-emerald-900">3.75 g</span>
+                                    <span id="remainingSodiumDisplay" class="text-[11px] font-semibold text-emerald-700">(1500 mg Na)</span>
+                                </div>
+                            </div>
+                            <i id="remainingIcon" data-lucide="shield-check" class="w-5 h-5 text-emerald-600 shrink-0"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hydration & Quick Restaurant Shortcut -->
+                <div class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <button onclick="addWater(1)" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-950/80 hover:bg-sky-100 active:scale-95 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-800 text-xs font-bold transition">
+                            <i data-lucide="droplets" class="w-3.5 h-3.5 text-sky-500"></i>
+                            <span>+1 Acqua</span>
+                        </button>
+                        <span id="waterCountDisplay" class="text-xs font-bold text-slate-600 dark:text-slate-300">0 / 8 💧</span>
+                        <button onclick="addWater(-1)" class="text-slate-400 hover:text-slate-600 p-1 text-xs font-bold" title="Rimuovi bicchiere">-</button>
+                    </div>
+
+                    <button onclick="switchMainTab('swaps')" class="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-bold active:scale-95 transition">
+                        <i data-lucide="utensils" class="w-3.5 h-3.5"></i>
+                        <span>Mangio Fuori / Swaps</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. INSERIMENTO ULTRA-RAPIDO "1-TAP" -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
+                            <i data-lucide="zap" class="w-4 h-4 text-amber-500 fill-amber-500"></i>
+                            <span>Aggiunta Rapida 1-Tap</span>
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Tocca un alimento per aggiungerlo subito al diario</p>
+                    </div>
+                    <button onclick="openCustomFoodModal()" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-950/80 hover:bg-sky-100 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-xs font-bold active:scale-95 transition">
+                        <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                        <span>Nuovo Cibo</span>
+                    </button>
+                </div>
+
+                <!-- STEP A: Selettore Rapido del Pasto Attivo -->
+                <div>
+                    <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">1. In quale pasto?</span>
+                    <div class="grid grid-cols-4 gap-1.5" id="mealSelectorGrid">
+                        <button onclick="setActiveMeal('colazione')" data-meal="colazione" class="meal-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl border text-xs font-bold transition active:scale-95">
+                            <span class="text-base leading-none mb-1">☕</span>
+                            <span>Colazione</span>
+                        </button>
+                        <button onclick="setActiveMeal('pranzo')" data-meal="pranzo" class="meal-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl border text-xs font-bold transition active:scale-95">
+                            <span class="text-base leading-none mb-1">🍝</span>
+                            <span>Pranzo</span>
+                        </button>
+                        <button onclick="setActiveMeal('cena')" data-meal="cena" class="meal-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl border text-xs font-bold transition active:scale-95">
+                            <span class="text-base leading-none mb-1">🌙</span>
+                            <span>Cena</span>
+                        </button>
+                        <button onclick="setActiveMeal('spuntino')" data-meal="spuntino" class="meal-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl border text-xs font-bold transition active:scale-95">
+                            <span class="text-base leading-none mb-1">🍎</span>
+                            <span>Spuntino</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP B: Selettore Rapido della Porzione prima del tap -->
+                <div>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400">2. Quantità / Porzione</span>
+                        <span id="multiplierHint" class="text-[11px] font-bold text-sky-600 dark:text-sky-400">1x (Porzione standard)</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1.5" id="portionSelectorGrid">
+                        <button onclick="setPortionMultiplier(0.5)" data-mult="0.5" class="mult-btn py-2 px-2 rounded-xl border text-xs font-extrabold transition active:scale-95">
+                            0.5x <span class="block text-[10px] font-medium opacity-75">Mezza</span>
+                        </button>
+                        <button onclick="setPortionMultiplier(1)" data-mult="1" class="mult-btn py-2 px-2 rounded-xl border text-xs font-extrabold transition active:scale-95">
+                            1x <span class="block text-[10px] font-medium opacity-75">Normale</span>
+                        </button>
+                        <button onclick="setPortionMultiplier(1.5)" data-mult="1.5" class="mult-btn py-2 px-2 rounded-xl border text-xs font-extrabold transition active:scale-95">
+                            1.5x <span class="block text-[10px] font-medium opacity-75">Abbondante</span>
+                        </button>
+                        <button onclick="setPortionMultiplier(2)" data-mult="2" class="mult-btn py-2 px-2 rounded-xl border text-xs font-extrabold transition active:scale-95">
+                            2x <span class="block text-[10px] font-medium opacity-75">Doppia</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- STEP C: Ricerca veloce + Categorie -->
+                <div class="space-y-2.5 pt-1">
+                    <div class="relative">
+                        <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                        <input id="foodSearchInput" type="text" oninput="renderFoodGrid()" placeholder="Cerca cibo (es. pane, crudo, pizza, dado...)" class="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium">
+                        <button id="clearSearchBtn" onclick="clearFoodSearch()" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <!-- Category Filter Pills -->
+                    <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1" id="categoryTabs">
+                        <button onclick="setFoodCategory('tutti')" data-cat="tutti" class="cat-pill shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition">
+                            Tutti
+                        </button>
+                        <button onclick="setFoodCategory('condimenti')" data-cat="condimenti" class="cat-pill shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition">
+                            🧂 Condimenti
+                        </button>
+                        <button onclick="setFoodCategory('pane')" data-cat="pane" class="cat-pill shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition">
+                            🍞 Pane & Forno
+                        </button>
+                        <button onclick="setFoodCategory('salumi')" data-cat="salumi" class="cat-pill shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition">
+                            🧀 Salumi & Formaggi
+                        </button>
+                        <button onclick="setFoodCategory('primi')" data-cat="primi" class="cat-pill shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition">
+                            🍝 Primi & Secondi
+                        </button>
+                        <button onclick="setFoodCategory('preferiti')" data-cat="preferiti" class="cat-pill shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border transition">
+                            ⭐ Preferiti / Miei
+                        </button>
+                    </div>
+
+                    <!-- 1-Tap Food Grid -->
+                    <div id="foodGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-0.5">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. SCUDO POTASSIO (DIETA DASH EQUILIBRIO SODIO/POTASSIO) -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            🛡️ Dieta DASH Anti-Ipertensione
+                        </span>
+                        <h2 class="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white mt-1">
+                            Scudo Potassio (Aiuta a smaltire il Sodio)
+                        </h2>
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                            Tocca i cibi ricchi di potassio mangiati oggi (obiettivo: 4 porzioni/giorno)
+                        </p>
+                    </div>
+                    <span id="potassiumBadge" class="px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                        0 / 4 🛡️
+                    </span>
+                </div>
+
+                <!-- 6 Quick Potassium Tap Buttons -->
+                <div id="potassiumGrid" class="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    <!-- Populated dynamically by renderPotassiumShield() -->
+                </div>
+
+                <!-- Progress bar + Medical Note -->
+                <div class="space-y-1.5 pt-1">
+                    <div class="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                        <div id="potassiumProgressBar" class="h-full bg-gradient-to-r from-teal-500 to-emerald-500 transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <p class="text-[10px] text-slate-400 dark:text-slate-500 leading-tight">
+                        ℹ️ Il potassio naturale (frutta, verdura, legumi) favorisce l'escrezione renale del sodio e rilassa le pareti vascolari. <em>Nota: segui sempre le indicazioni del medico se assumi farmaci risparmiatori di potassio o soffri di insufficienza renale.</em>
+                    </p>
+                </div>
+            </div>
+
+            <!-- 5. DIARIO DI OGGI & CONTROLLO ERRORI -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-base font-extrabold text-slate-900 dark:text-white">📋 Diario Alimentare di Oggi</h2>
+                        <span id="diaryCountBadge" class="px-2 py-0.5 text-xs font-extrabold rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">0 voci</span>
+                    </div>
+
+                    <button id="diaryUndoBtn" onclick="undoLastAction()" class="hidden items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/80 hover:bg-amber-100 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-bold active:scale-95 transition">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                        <span>Annulla ultimo</span>
+                    </button>
+                </div>
+
+                <div id="diaryContainer" class="space-y-3">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- TAB 2: ETICHETTA & RICERCA SUPERMERCATO LIVE (OPENFOODFACTS)      -->
+        <!-- ================================================================= -->
+        <section id="tab-etichetta" class="hidden space-y-4">
+
+            <!-- 1. RICERCA LIVE PRODOTTI SUPERMERCATO / CODICE A BARRE -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+                <div>
+                    <span class="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                        <i data-lucide="search" class="w-3.5 h-3.5"></i> Database Supermercato Live
+                    </span>
+                    <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white mt-1">
+                        Cerca Prodotto o Codice a Barre (EAN)
+                    </h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Trova subito il sale reale per 100g dei prodotti venduti in Italia (OpenFoodFacts)
+                    </p>
+                </div>
+
+                <div class="flex gap-2">
+                    <div class="relative flex-1">
+                        <input id="offSearchInput" type="text" onkeydown="if(event.key==='Enter') searchOpenFoodFacts()" placeholder="Es. Crackers Mulino Bianco, Tonno Rio Mare o codice 800..." class="w-full pl-3.5 pr-4 py-2.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium">
+                    </div>
+                    <button onclick="searchOpenFoodFacts()" id="offSearchBtn" class="px-4 py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm flex items-center gap-1.5 shrink-0 shadow-md shadow-sky-600/20 transition">
+                        <i data-lucide="search" class="w-4 h-4"></i>
+                        <span>Cerca</span>
+                    </button>
+                </div>
+
+                <!-- Quick Supermarket Search Chips -->
+                <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+                    <span class="text-[10px] font-bold text-slate-400 shrink-0">Prova:</span>
+                    <button onclick="quickOffSearch('Grissini')" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0 hover:bg-sky-50">Grissini</button>
+                    <button onclick="quickOffSearch('Fesa di tacchino')" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0 hover:bg-sky-50">Fesa di tacchino</button>
+                    <button onclick="quickOffSearch('Fiocchi di latte')" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0 hover:bg-sky-50">Fiocchi di latte</button>
+                    <button onclick="quickOffSearch('Minestrone surgelato')" class="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 shrink-0 hover:bg-sky-50">Minestrone</button>
+                </div>
+
+                <!-- Search Results Container -->
+                <div id="offResultsContainer" class="hidden space-y-2 max-h-64 overflow-y-auto pr-1">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- 2. CALCOLATORE MANUALE DA ETICHETTA -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <span class="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/80 px-2.5 py-0.5 rounded-full border border-sky-200/60 dark:border-sky-800">
+                            <i data-lucide="scan-barcode" class="w-3.5 h-3.5"></i> Calcolatore Rapido
+                        </span>
+                        <h2 class="text-lg font-extrabold text-slate-900 dark:text-white mt-1">Calcolatore da Etichetta Nutrizionale</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Inserisci il valore per 100g (o seleziona un prodotto qui sopra) e i grammi mangiati.</p>
+                    </div>
+                </div>
+
+                <!-- Step 1: Switch Sale (g) vs Sodio (mg) -->
+                <div class="p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl grid grid-cols-2 gap-1 border border-slate-200/70 dark:border-slate-700">
+                    <button id="modeSaltBtn" onclick="setLabelInputMode('salt')" class="py-2.5 px-3 rounded-xl text-xs font-extrabold transition bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm">
+                        Sull'etichetta c'è SALE (g)
+                    </button>
+                    <button id="modeSodiumBtn" onclick="setLabelInputMode('sodium')" class="py-2.5 px-3 rounded-xl text-xs font-extrabold transition text-slate-600 dark:text-slate-400">
+                        Sull'etichetta c'è SODIO (mg)
+                    </button>
+                </div>
+
+                <!-- Step 2: Value per 100g -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <label id="labelPer100Title" for="labelPer100Input" class="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                            1. Sale per 100g di prodotto (in grammi)
+                        </label>
+                        <span id="labelDensityBadge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            Inserisci valore
+                        </span>
+                    </div>
+                    <div class="relative">
+                        <input id="labelPer100Input" type="number" step="0.01" min="0" placeholder="Es. 1.2" oninput="calculateFromLabel()" class="w-full px-4 py-3.5 text-xl font-black text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-none focus:border-sky-500 transition">
+                        <span id="labelPer100Unit" class="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-extrabold text-slate-400">g / 100g</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        <span class="text-[11px] font-semibold text-slate-400">Esempi:</span>
+                        <button onclick="setQuickLabelValue(0.2)" class="text-[11px] font-bold px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">0.2g (Basso)</button>
+                        <button onclick="setQuickLabelValue(0.8)" class="text-[11px] font-bold px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">0.8g (Medio)</button>
+                        <button onclick="setQuickLabelValue(1.5)" class="text-[11px] font-bold px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">1.5g (Alto)</button>
+                        <button onclick="setQuickLabelValue(2.5)" class="text-[11px] font-bold px-2 py-1 rounded-lg bg-rose-100 dark:bg-rose-900 text-rose-800 dark:text-rose-200 border border-rose-300">2.5g (Molto alto)</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Grams Eaten -->
+                <div class="space-y-2 pt-1">
+                    <label for="labelGramsEatenInput" class="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wide block">
+                        2. Quanti grammi ne mangi?
+                    </label>
+                    <div class="grid grid-cols-5 gap-1.5">
+                        <button onclick="setLabelGrams(30)" class="py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-sky-50 text-xs font-extrabold text-slate-700 dark:text-slate-200 active:scale-95 transition">30g</button>
+                        <button onclick="setLabelGrams(50)" class="py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-sky-50 text-xs font-extrabold text-slate-700 dark:text-slate-200 active:scale-95 transition">50g</button>
+                        <button onclick="setLabelGrams(100)" class="py-2 rounded-xl border border-sky-500 bg-sky-50 dark:bg-sky-950 text-xs font-extrabold text-sky-700 dark:text-sky-300 active:scale-95 transition">100g</button>
+                        <button onclick="setLabelGrams(150)" class="py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-sky-50 text-xs font-extrabold text-slate-700 dark:text-slate-200 active:scale-95 transition">150g</button>
+                        <button onclick="setLabelGrams(200)" class="py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-sky-50 text-xs font-extrabold text-slate-700 dark:text-slate-200 active:scale-95 transition">200g</button>
+                    </div>
+                    <div class="relative mt-2">
+                        <input id="labelGramsEatenInput" type="number" step="5" min="1" value="100" oninput="calculateFromLabel()" class="w-full px-4 py-3 text-lg font-extrabold text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500">
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">grammi mangiati</span>
+                    </div>
+                </div>
+
+                <!-- Step 4: Instant Result Box -->
+                <div id="labelResultCard" class="p-4 rounded-2xl bg-slate-900 dark:bg-slate-950 border border-slate-800 text-white space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                        <div>
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Sale nella tua porzione</span>
+                            <div class="flex items-baseline gap-2 mt-0.5">
+                                <span id="calcSaltResult" class="text-3xl font-black text-emerald-400">0.00 g</span>
+                                <span id="calcSodiumResult" class="text-xs font-bold text-slate-300">(0 mg Sodio)</span>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">Impatto Giornaliero</span>
+                            <span id="calcPercentLimit" class="text-lg font-black text-sky-400">0% del limite</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2.5">
+                        <input id="labelProductName" type="text" placeholder="Nome prodotto (es. Crackers Integrali)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-sky-400">
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button onclick="addCalculatedLabelToDiary(false)" class="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition shadow-lg shadow-emerald-500/20">
+                                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                                <span>Aggiungi al Diario di Oggi</span>
+                            </button>
+                            <button onclick="addCalculatedLabelToDiary(true)" class="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-amber-300 border border-slate-700 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition">
+                                <i data-lucide="star" class="w-4 h-4"></i>
+                                <span>Aggiungi + Salva Preferito</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- TAB 3: PRESSIONE ARTERIOSA & PROTOCOLLO GUIDATO ESC/ESH           -->
+        <!-- ================================================================= -->
+        <section id="tab-pressione" class="hidden space-y-4">
+
+            <!-- 1. PROTOCOLLO GUIDATO: TIMER RILASSAMENTO + MEDIA 2-3 MISURAZIONI -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <span class="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/80 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">
+                            <i data-lucide="timer" class="w-3.5 h-3.5"></i> Protocollo Cardiologico ESC/ESH
+                        </span>
+                        <h2 class="text-base font-extrabold text-slate-900 dark:text-white mt-1">
+                            Preparazione & Media Misurazioni
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">
+                            Riposa prima di misurare ed effettua 2-3 letture a distanza di 1 minuto.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Relaxation Timer Box -->
+                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2.5">
+                            <div id="bpTimerCircle" class="w-11 h-11 rounded-2xl bg-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm">
+                                <span id="bpTimerDisplay">01:00</span>
+                            </div>
+                            <div>
+                                <span class="text-xs font-extrabold text-slate-900 dark:text-white block">Timer Rilassamento Pre-Misura</span>
+                                <span id="bpTimerStatus" class="text-[11px] text-slate-500 dark:text-slate-400">Siediti comodo, piedi a terra, braccio appoggiato</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button onclick="startBpRelaxTimer(60)" class="px-2.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-extrabold transition">
+                                1 Min
+                            </button>
+                            <button onclick="startBpRelaxTimer(300)" class="px-2.5 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-100 text-xs font-bold transition">
+                                5 Min
+                            </button>
+                            <button id="stopBpTimerBtn" onclick="stopBpRelaxTimer()" class="hidden px-2.5 py-1.5 rounded-xl bg-rose-100 text-rose-700 text-xs font-bold">
+                                Stop
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Toggle Multi-Reading Calculator -->
+                    <div class="pt-2 border-t border-slate-200/70 dark:border-slate-700">
+                        <button onclick="toggleMultiBpCalc()" class="w-full flex items-center justify-between text-xs font-extrabold text-indigo-600 dark:text-indigo-400 py-1">
+                            <span>🧮 Calcola Media Automatica di 2 o 3 misurazioni consecutive</span>
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+
+                        <div id="multiBpCalcBox" class="hidden mt-2.5 space-y-2.5 pt-2 border-t border-slate-200/50 dark:border-slate-700">
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">
+                                Inserisci 2 o 3 misurazioni fatte a 1 minuto di distanza: la media verrà copiata automaticamente nei campi principali qui sotto.
+                            </p>
+                            <div class="grid grid-cols-3 gap-2 text-center text-[11px] font-bold">
+                                <div class="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                                    <span class="text-slate-400 block">1ª Lettura</span>
+                                    <input id="m1Sys" type="number" placeholder="SYS" oninput="computeMultiBpAverage()" class="w-full text-center font-extrabold bg-slate-50 dark:bg-slate-800 rounded-lg py-1">
+                                    <input id="m1Dia" type="number" placeholder="DIA" oninput="computeMultiBpAverage()" class="w-full text-center font-extrabold bg-slate-50 dark:bg-slate-800 rounded-lg py-1">
+                                </div>
+                                <div class="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                                    <span class="text-slate-400 block">2ª Lettura</span>
+                                    <input id="m2Sys" type="number" placeholder="SYS" oninput="computeMultiBpAverage()" class="w-full text-center font-extrabold bg-slate-50 dark:bg-slate-800 rounded-lg py-1">
+                                    <input id="m2Dia" type="number" placeholder="DIA" oninput="computeMultiBpAverage()" class="w-full text-center font-extrabold bg-slate-50 dark:bg-slate-800 rounded-lg py-1">
+                                </div>
+                                <div class="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                                    <span class="text-slate-400 block">3ª (Opz.)</span>
+                                    <input id="m3Sys" type="number" placeholder="SYS" oninput="computeMultiBpAverage()" class="w-full text-center font-extrabold bg-slate-50 dark:bg-slate-800 rounded-lg py-1">
+                                    <input id="m3Dia" type="number" placeholder="DIA" oninput="computeMultiBpAverage()" class="w-full text-center font-extrabold bg-slate-50 dark:bg-slate-800 rounded-lg py-1">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. INSERIMENTO E STORICO PRESSIONE -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-lg font-extrabold text-slate-900 dark:text-white">Registra Pressione Arteriosa</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Classificazione istantanea secondo linee guida ESC / ESH</p>
+                    </div>
+                </div>
+
+                <!-- Blood Pressure Input Grid -->
+                <div class="grid grid-cols-3 gap-2.5">
+                    <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                        <label for="bpSysInput" class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">Massima (SYS)</label>
+                        <input id="bpSysInput" type="number" min="70" max="260" placeholder="125" oninput="previewBpClassification()" class="w-full mt-1 text-center text-2xl font-black text-slate-900 dark:text-white bg-transparent focus:outline-none">
+                        <span class="text-[10px] font-bold text-slate-400">mmHg</span>
+                    </div>
+                    <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                        <label for="bpDiaInput" class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">Minima (DIA)</label>
+                        <input id="bpDiaInput" type="number" min="40" max="160" placeholder="80" oninput="previewBpClassification()" class="w-full mt-1 text-center text-2xl font-black text-slate-900 dark:text-white bg-transparent focus:outline-none">
+                        <span class="text-[10px] font-bold text-slate-400">mmHg</span>
+                    </div>
+                    <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-center">
+                        <label for="bpPulseInput" class="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">Battiti (BPM)</label>
+                        <input id="bpPulseInput" type="number" min="35" max="220" placeholder="68" class="w-full mt-1 text-center text-2xl font-black text-slate-900 dark:text-white bg-transparent focus:outline-none">
+                        <span class="text-[10px] font-bold text-slate-400">bpm</span>
+                    </div>
+                </div>
+
+                <!-- Live ESC/ESH Classification Preview Banner -->
+                <div id="bpLivePreview" class="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+                    <span>Inserisci Massima e Minima per la classificazione ESC/ESH</span>
+                    <i data-lucide="activity" class="w-4 h-4 text-slate-400"></i>
+                </div>
+
+                <!-- Context / Note & Save Button -->
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <select id="bpContextSelect" aria-label="Momento della misurazione" class="sm:col-span-5 px-3.5 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none">
+                        <option value="Mattina a riposo">🌅 Mattina a riposo</option>
+                        <option value="Sera prima della pastiglia">🌙 Sera pre-pastiglia</option>
+                        <option value="Dopo farmaco">💊 Dopo farmaco</option>
+                        <option value="Pomeriggio">☀️ Pomeriggio</option>
+                        <option value="Sintomi / Controllo">⚡ Controllo extra</option>
+                    </select>
+                    <button onclick="saveBpReading()" class="sm:col-span-7 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-rose-600/20 transition">
+                        <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                        <span>Salva Misurazione</span>
+                    </button>
+                </div>
+
+                <!-- Recent BP Logs -->
+                <div class="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+                    <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-500">Misurazioni Registrate (Ultimi 7gg)</h3>
+                    <div id="bpLogsContainer" class="space-y-2">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- TAB 4: SOSTITUZIONI FURBE (SWAPS) & MODALITÀ "MANGIO FUORI"       -->
+        <!-- ================================================================= -->
+        <section id="tab-swaps" class="hidden space-y-4">
+
+            <!-- 1. MODALITÀ RISTORANTE / MANGIO FUORI -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+                <div>
+                    <span class="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/80 px-2.5 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                        <i data-lucide="utensils" class="w-3.5 h-3.5"></i> Salva-Pressione al Ristorante
+                    </span>
+                    <h2 class="text-lg font-extrabold text-slate-900 dark:text-white mt-1">Modalità "Mangio Fuori"</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Stima rapidamente un pasto fuori casa e scopri la mossa furba per dimezzare il sale nascosto.
+                    </p>
+                </div>
+
+                <div id="restaurantCardsGrid" class="grid grid-cols-1 gap-2.5">
+                    <!-- Populated dynamically by renderSwapsAndRestaurant() -->
+                </div>
+            </div>
+
+            <!-- 2. SOSTITUZIONI FURBE ANTI-SALE (SWAPS) -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+                <div>
+                    <span class="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Cambio Intelligente
+                    </span>
+                    <h2 class="text-lg font-extrabold text-slate-900 dark:text-white mt-1">Sostituzioni Furbe Anti-Sale</h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">
+                        Guarda quanto sale risparmi sostituendo un ingrediente comune con l'alternativa amica della pressione.
+                    </p>
+                </div>
+
+                <div id="smartSwapsGrid" class="grid grid-cols-1 gap-2.5">
+                    <!-- Populated dynamically by renderSwapsAndRestaurant() -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================= -->
+        <!-- TAB 5: STORICO 7 GIORNI & REPORT PER IL MEDICO                    -->
+        <!-- ================================================================= -->
+        <section id="tab-storico" class="hidden space-y-4">
+
+            <!-- 1. GRAFICO COMBINATO 7 GIORNI: SALE vs PRESSIONE + TERAPIA -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h2 class="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">📊 Andamento 7 Giorni: Sale, Pressione & Pastiglia</h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Verifica come il consumo di sale e la pastiglia serale influiscono sulla pressione</p>
+                    </div>
+                    <button onclick="loadDemoHistoryData()" class="px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-[11px] font-bold transition active:scale-95">
+                        Simula 7gg Demo
+                    </button>
+                </div>
+
+                <!-- 7-Day Summary KPIs -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
+                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Media Sale 7gg</span>
+                        <span id="avg7Salt" class="text-base sm:text-lg font-black text-slate-900 dark:text-white">0.0 g</span>
+                        <span id="avg7Sodium" class="text-[10px] font-semibold text-slate-500 block">0 mg Na</span>
+                    </div>
+                    <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
+                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Pastiglia Sera</span>
+                        <span id="daysMedTaken7" class="text-base sm:text-lg font-black text-indigo-600 dark:text-indigo-400">0 / 7</span>
+                        <span class="text-[10px] font-semibold text-slate-500 block">giorni presa</span>
+                    </div>
+                    <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700">
+                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Pressione Media</span>
+                        <span id="avg7Bp" class="text-base sm:text-lg font-black text-rose-600 dark:text-rose-400">-- / --</span>
+                        <span class="text-[10px] font-semibold text-slate-500 block">mmHg (7gg)</span>
+                    </div>
+                </div>
+
+                <!-- Visual 7-Day Chart -->
+                <div id="chart7DaysContainer" class="pt-2 pb-1">
+                    <!-- Rendered dynamically -->
+                </div>
+            </div>
+
+            <!-- 2. REPORT PER IL MEDICO CURANTE -->
+            <div class="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-200/80 dark:border-slate-800 space-y-3.5">
+                <div class="flex items-start justify-between gap-2">
+                    <div>
+                        <span class="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                            <i data-lucide="stethoscope" class="w-3.5 h-3.5"></i> Pronto per WhatsApp o Visita
+                        </span>
+                        <h3 class="text-base font-extrabold text-slate-900 dark:text-white mt-1">Report Clinico per il Medico</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Riepilogo completo di sale/sodio, pressione arteriosa e aderenza alla pastiglia serale.</p>
+                    </div>
+                </div>
+
+                <textarea id="doctorReportTextarea" readonly rows="9" class="w-full p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none"></textarea>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button onclick="copyDoctorReport()" class="w-full py-3 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-sky-600/20 transition">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                        <span>Copia Report (WhatsApp / Email)</span>
+                    </button>
+                    <button onclick="window.print()" class="w-full py-3 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 active:scale-95 text-slate-800 dark:text-slate-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition">
+                        <i data-lucide="printer" class="w-4 h-4"></i>
+                        <span>Stampa / Salva PDF</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ================= MODAL 1: IMPOSTAZIONI TERAPIA & PROMEMORIA PASTIGLIA SERA ================= -->
+    <div id="therapyModal" class="fixed inset-0 z-50 hidden bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3.5 no-print">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">🌙</span>
+                    <h3 class="text-base font-extrabold text-slate-900 dark:text-white">Promemoria Pastiglia Prima di Dormire</h3>
+                </div>
+                <button onclick="closeTherapyModal()" class="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <!-- Evening Pill Config -->
+            <div class="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/80 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-extrabold uppercase tracking-wider text-indigo-900 dark:text-indigo-300">🌙 Pastiglia della Sera (Pre-Sonno)</span>
+                    <input id="cfgEveningEnabled" type="checkbox" checked class="w-4 h-4 accent-indigo-600 rounded">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">Nome Farmaco</label>
+                        <input id="cfgEveningName" type="text" value="Pastiglia Pressione Sera" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold">
+                    </div>
+                    <div>
+                        <label class="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">Dosaggio</label>
+                        <input id="cfgEveningDose" type="text" value="1 compressa" class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[11px] font-bold text-slate-600 dark:text-slate-300 block mb-1">⏰ Orario Promemoria Prima di Andare a Letto</label>
+                    <input id="cfgEveningTime" type="time" value="22:30" class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border-2 border-indigo-400 dark:border-indigo-600 text-base font-black text-indigo-950 dark:text-white">
+                </div>
+            </div>
+
+            <!-- Optional Morning Pill Config -->
+            <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-extrabold text-slate-700 dark:text-slate-200">🌅 Aggiungi anche Pastiglia della Mattina</span>
+                    <input id="cfgMorningEnabled" type="checkbox" class="w-4 h-4 accent-sky-600 rounded">
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <input id="cfgMorningName" type="text" placeholder="Farmaco mattina" value="Pastiglia Mattina" class="col-span-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold">
+                    <input id="cfgMorningTime" type="time" value="08:00" class="px-2 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-black">
+                </div>
+            </div>
+
+            <!-- Alerts & Native Phone Alarm Actions -->
+            <div class="space-y-2 pt-1">
+                <div class="flex items-center justify-between gap-2">
+                    <button type="button" onclick="requestBrowserNotificationPermission()" class="flex-1 py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 transition">
+                        <i data-lucide="bell" class="w-4 h-4 text-amber-500"></i>
+                        <span id="notifBtnLabel">Attiva Notifiche Browser</span>
+                    </button>
+                    <button type="button" onclick="testMedicationReminderNow()" class="py-2.5 px-3 rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-extrabold flex items-center gap-1.5 transition">
+                        <i data-lucide="volume-2" class="w-4 h-4"></i>
+                        <span>Test Suono</span>
+                    </button>
+                </div>
+
+                <!-- Native Phone Alarm (.ics) & Google Calendar -->
+                <div class="p-3 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 space-y-2">
+                    <p class="text-[11px] font-bold text-emerald-900 dark:text-emerald-200 leading-snug">
+                        💡 <strong>Consiglio per Smartphone:</strong> attiva anche la sveglia nel calendario nativo del telefono, così suonerà ogni sera anche a schermo spento!
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                        <button type="button" onclick="downloadMedicationICS()" class="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm">
+                            <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+                            <span>Sveglia Nativa (.ics)</span>
+                        </button>
+                        <button type="button" onclick="openGoogleCalendarReminder()" class="py-2 px-3 rounded-xl bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-xs font-extrabold flex items-center justify-center gap-1.5">
+                            <span>📅 Google Calendar</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button onclick="closeTherapyModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold">Chiudi</button>
+                <button onclick="saveTherapySettings()" class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold shadow-md shadow-indigo-600/20">Salva Promemoria</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 2: INSTALLA APP SUL TELEFONO & BACKUP DATI ================= -->
+    <div id="pwaModal" class="fixed inset-0 z-50 hidden bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3.5 no-print">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="smartphone" class="w-5 h-5 text-sky-600"></i>
+                    <h3 class="text-base font-extrabold text-slate-900 dark:text-white">Aggiungi sul Telefono & Backup</h3>
+                </div>
+                <button onclick="closePwaModal()" class="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <!-- Native 1-Tap Install Button (shown automatically if browser supports beforeinstallprompt) -->
+            <button id="nativePwaInstallBtn" onclick="triggerNativePwaInstall()" class="hidden w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-sky-600 to-indigo-600 text-white font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-sky-600/25 active:scale-95 transition">
+                <i data-lucide="download" class="w-5 h-5"></i>
+                <span>📲 Installa App sulla Schermata Home</span>
+            </button>
+
+            <!-- Step-by-step instructions for Android & iPhone -->
+            <div class="space-y-2.5 text-xs">
+                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-1">
+                    <span class="font-extrabold text-slate-900 dark:text-white block">🤖 Su Android (Chrome / Samsung Internet):</span>
+                    <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Tocca i <strong>3 puntini (⋮)</strong> in alto a destra nel browser e seleziona <strong>"Aggiungi a schermata Home"</strong> o <strong>"Installa app"</strong>. Avrai l'icona di SaleZero insieme alle tue app!
+                    </p>
+                </div>
+                <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-1">
+                    <span class="font-extrabold text-slate-900 dark:text-white block">🍏 Su iPhone / iPad (Safari):</span>
+                    <p class="text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Tocca il pulsante <strong>Condividi (quadrato con freccia in su ⬆️)</strong> in basso su Safari e scorri fino a <strong>"Aggiungi alla schermata Home"</strong>.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Download Standalone Offline HTML App -->
+            <div class="pt-1">
+                <button onclick="downloadStandaloneAppFile()" class="w-full py-3 px-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/70 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-extrabold text-xs flex items-center justify-center gap-2 active:scale-95 transition">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>Scarica File App Offline (.html) sul Telefono</span>
+                </button>
+            </div>
+
+            <!-- JSON Data Backup Export / Import -->
+            <div class="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                <span class="text-xs font-extrabold uppercase tracking-wider text-slate-400 block">Salvataggio & Backup Dati</span>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="exportBackupJson()" class="py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        <span>Esporta Backup</span>
+                    </button>
+                    <label class="py-2.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                        <span>Importa Backup</span>
+                        <input type="file" accept=".json" onchange="importBackupJson(event)" class="hidden">
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 3: NUOVO CIBO PREFERITO 1-TAP ================= -->
+    <div id="customFoodModal" class="fixed inset-0 z-50 hidden bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 no-print">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-5 shadow-xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-extrabold text-slate-900 dark:text-white">⭐ Crea Cibo Preferito 1-Tap</h3>
+                <button onclick="closeCustomFoodModal()" class="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Nome Alimento</label>
+                    <input id="newFoodName" type="text" placeholder="Es. Ricotta fresca, Fesa di tacchino..." class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Porzione standard</label>
+                        <input id="newFoodPortion" type="text" placeholder="Es. 100g / 1 fetta" class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div>
+                        <label class="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Sale per porzione (g)</label>
+                        <input id="newFoodSalt" type="number" step="0.05" min="0" placeholder="Es. 0.4" class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">Emoji identificativa</label>
+                    <div class="flex items-center gap-1.5 flex-wrap" id="emojiPickerRow">
+                        <button type="button" onclick="selectNewFoodEmoji('🥣')" class="emoji-opt p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-base border-2 border-sky-500">🥣</button>
+                        <button type="button" onclick="selectNewFoodEmoji('🧀')" class="emoji-opt p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-base border-2 border-transparent">🧀</button>
+                        <button type="button" onclick="selectNewFoodEmoji('🥪')" class="emoji-opt p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-base border-2 border-transparent">🥪</button>
+                        <button type="button" onclick="selectNewFoodEmoji('🥗')" class="emoji-opt p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-base border-2 border-transparent">🥗</button>
+                        <button type="button" onclick="selectNewFoodEmoji('🐟')" class="emoji-opt p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-base border-2 border-transparent">🐟</button>
+                        <button type="button" onclick="selectNewFoodEmoji('🍗')" class="emoji-opt p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-base border-2 border-transparent">🍗</button>
+                        <button type="button" onclick="selectNewFoodEmoji('🍪')" class="emoji-opt p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-base border-2 border-transparent">🍪</button>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <button onclick="closeCustomFoodModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold">Annulla</button>
+                <button onclick="saveCustomFood()" class="px-4 py-2.5 rounded-xl bg-sky-600 text-white text-xs font-extrabold shadow-md shadow-sky-600/20">Salva nella Griglia 1-Tap</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= TOAST NOTIFICATION & UNDO BANNER ================= -->
+    <div id="toastBanner" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 hidden max-w-sm w-[92%] bg-slate-900/95 text-white px-4 py-3 rounded-2xl shadow-xl border border-slate-700 flex items-center justify-between gap-3 no-print">
+        <div class="flex items-center gap-2 text-xs font-bold truncate">
+            <span id="toastIcon" class="text-emerald-400">✓</span>
+            <span id="toastMessage" class="truncate">Alimento aggiunto</span>
+        </div>
+        <button id="toastUndoBtn" onclick="undoLastAction()" class="shrink-0 px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 text-xs font-extrabold hover:bg-amber-300 active:scale-95 transition">
+            Annulla
+        </button>
+    </div>
+
+    <!-- ================= BOTTOM NAVIGATION BAR (5 TABS MOBILE-FIRST) ================= -->
+    <nav class="fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 shadow-lg no-print">
+        <div class="max-w-xl mx-auto grid grid-cols-5 px-1.5 py-1.5">
+            <button onclick="switchMainTab('oggi')" data-tab="oggi" class="nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-2xl text-sky-600 font-extrabold transition active:scale-95">
+                <i data-lucide="gauge" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Oggi</span>
+            </button>
+            <button onclick="switchMainTab('etichetta')" data-tab="etichetta" class="nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-2xl text-slate-500 font-semibold transition active:scale-95">
+                <i data-lucide="scan-barcode" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Etichetta</span>
+            </button>
+            <button onclick="switchMainTab('pressione')" data-tab="pressione" class="nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-2xl text-slate-500 font-semibold transition active:scale-95">
+                <i data-lucide="heart-pulse" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Pressione</span>
+            </button>
+            <button onclick="switchMainTab('swaps')" data-tab="swaps" class="nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-2xl text-slate-500 font-semibold transition active:scale-95">
+                <i data-lucide="sparkles" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Swaps & Fuori</span>
+            </button>
+            <button onclick="switchMainTab('storico')" data-tab="storico" class="nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-2xl text-slate-500 font-semibold transition active:scale-95">
+                <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+                <span class="text-[10px] mt-0.5">Medico</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- ================= APPLICATION LOGIC ================= -->
+    <script>
+        // ============================================================================
+        // 1. DEFAULT ITALIAN FOOD DATABASE, POTASSIUM SHIELD & SMART SWAPS
+        // ============================================================================
+        const DEFAULT_FOODS = [
+            // Condimenti
+            { id: 'cond_pizzico', name: 'Pizzico di sale', portion: '1 pizzico', saltGrams: 0.4, category: 'condimenti', emoji: '🧂' },
+            { id: 'cond_cucchiaino', name: 'Mezzo cucchiaino sale', portion: '1/2 cucchiaino', saltGrams: 2.5, category: 'condimenti', emoji: '🥄' },
+            { id: 'cond_dado', name: 'Dado da brodo', portion: '1/2 dado', saltGrams: 2.0, category: 'condimenti', emoji: '🍲' },
+            { id: 'cond_soia', name: 'Salsa di soia', portion: '1 cucchiaio', saltGrams: 2.4, category: 'condimenti', emoji: '🥢' },
+            { id: 'cond_ketchup', name: 'Ketchup / Maionese', portion: '1 bustina (15g)', saltGrams: 0.3, category: 'condimenti', emoji: '🍅' },
+            { id: 'cond_olive', name: 'Olive in salamoia', portion: '5-6 olive (35g)', saltGrams: 1.1, category: 'condimenti', emoji: '🫒' },
+
+            // Pane e Forno
+            { id: 'pane_comune', name: 'Pane comune', portion: '1 fetta (50g)', saltGrams: 0.6, category: 'pane', emoji: '🍞' },
+            { id: 'pane_toscano', name: 'Pane toscano / sciocco', portion: '1 fetta (50g)', saltGrams: 0.0, category: 'pane', emoji: '🥖' },
+            { id: 'pane_crackers', name: 'Crackers / Grissini', portion: '1 pacchetto (35g)', saltGrams: 0.7, category: 'pane', emoji: '🥨' },
+            { id: 'pane_focaccia', name: 'Focaccia / Piadina', portion: '1 porzione (100g)', saltGrams: 1.8, category: 'pane', emoji: '🫓' },
+            { id: 'pane_pizza', name: 'Pizza Margherita', portion: '1 pizza intera', saltGrams: 4.5, category: 'pane', emoji: '🍕' },
+            { id: 'pane_biscotti', name: 'Biscotti / Brioche', portion: '1 porzione colazione', saltGrams: 0.3, category: 'pane', emoji: '🥐' },
+
+            // Salumi e Formaggi
+            { id: 'sal_crudo', name: 'Prosciutto crudo', portion: 'Porzione (50g)', saltGrams: 2.2, category: 'salumi', emoji: '🥓' },
+            { id: 'sal_cotto', name: 'Prosciutto cotto / Bresaola', portion: 'Porzione (50g)', saltGrams: 1.5, category: 'salumi', emoji: '🥩' },
+            { id: 'sal_parmigiano', name: 'Parmigiano / Grana', portion: 'Porzione (30g)', saltGrams: 0.5, category: 'salumi', emoji: '🧀' },
+            { id: 'sal_mozzarella', name: 'Mozzarella / Ricotta fresca', portion: '1 porzione (100g)', saltGrams: 0.4, category: 'salumi', emoji: '⚪' },
+            { id: 'sal_pecorino', name: 'Stagionato / Pecorino', portion: 'Porzione (50g)', saltGrams: 1.6, category: 'salumi', emoji: '🧀' },
+            { id: 'sal_salmone', name: 'Salmone affumicato', portion: 'Porzione (50g)', saltGrams: 1.6, category: 'salumi', emoji: '🐟' },
+
+            // Primi e Secondi
+            { id: 'pri_pasta_salata', name: 'Pasta/Riso acqua salata', portion: '1 piatto (80g)', saltGrams: 0.8, category: 'primi', emoji: '🍝' },
+            { id: 'pri_pasta_poco', name: 'Pasta acqua poco salata', portion: '1 piatto (80g)', saltGrams: 0.3, category: 'primi', emoji: '🍜' },
+            { id: 'pri_tonno', name: 'Tonno in scatola sgocciolato', portion: '1 scatoletta (80g)', saltGrams: 0.8, category: 'primi', emoji: '🥫' },
+            { id: 'pri_legumi_no', name: 'Legumi in scatola (non sciacquati)', portion: 'Porzione (150g)', saltGrams: 1.1, category: 'primi', emoji: '🫘' },
+            { id: 'pri_legumi_si', name: 'Legumi in scatola sciacquati', portion: 'Porzione (150g)', saltGrams: 0.4, category: 'primi', emoji: '🚿' },
+            { id: 'pri_carne_fresca', name: 'Carne/Pesce fresco con spezie', portion: '1 filetto (150g)', saltGrams: 0.2, category: 'primi', emoji: '🍗' }
+        ];
+
+        const POTASSIUM_FOODS = [
+            { id: 'k_banana', name: 'Banana', emoji: '🍌', kMg: 400 },
+            { id: 'k_spinaci', name: 'Verdure foglia', emoji: '🥬', kMg: 500 },
+            { id: 'k_patate', name: 'Patate/Dolci', emoji: '🥔', kMg: 450 },
+            { id: 'k_legumi', name: 'Legumi/Lenticchie', emoji: '🫘', kMg: 400 },
+            { id: 'k_kiwi', name: 'Kiwi / Agrumi', emoji: '🥝', kMg: 320 },
+            { id: 'k_noci', name: 'Noci/Mandorle', emoji: '🥜', kMg: 250 }
+        ];
+
+        const RESTAURANT_PRESETS = [
+            {
+                id: 'rest_pizza',
+                title: '🍕 Pizzeria',
+                standardName: 'Pizza Margherita o Farcita intera',
+                standardSalt: 4.5,
+                smartName: 'Pizza Marinara/Verdure (lasciando 1/3 del bordo)',
+                smartSalt: 2.6,
+                tip: 'Evita salumi/olive sulla pizza e lascia parte del cornicione: risparmi subito quasi 2g di sale!'
+            },
+            {
+                id: 'rest_sushi',
+                title: '🍣 Sushi / Ristorante Asiatico',
+                standardName: 'Pasto Sushi con salsa di soia classica',
+                standardSalt: 4.2,
+                smartName: 'Sushi/Sashimi con soia a ridotto sale (tappo verde)',
+                smartSalt: 1.9,
+                tip: '1 solo cucchiaio di salsa di soia contiene 2.4g di sale! Intingi solo il lato del pesce e non il riso.'
+            },
+            {
+                id: 'rest_aperitivo',
+                title: '🥂 Aperitivo al Bar',
+                standardName: 'Patatine, olive, arachidi salate e salumi',
+                standardSalt: 2.8,
+                smartName: 'Pinzimonio verdure, lupini sciacquati o noci non salate',
+                smartSalt: 0.6,
+                tip: 'Chiedi crudité di verdure o bruschetta al pomodoro senza sale aggiunto al posto di patatine e olive.'
+            },
+            {
+                id: 'rest_trattoria',
+                title: '🥩 Ristorante / Trattoria',
+                standardName: 'Primo condito + Secondo con salse',
+                standardSalt: 3.4,
+                smartName: 'Pesce/Carne alla griglia "senza sale" con limone e verdure',
+                smartSalt: 1.2,
+                tip: 'Chiedi al cameriere "grigliata senza sale aggiunto, condisco io con olio e limone a tavola".'
+            }
+        ];
+
+        const SMART_SWAPS = [
+            {
+                highName: 'Prosciutto crudo (50g)',
+                highSalt: 2.2,
+                lowName: 'Ricotta fresca o Primo Sale (100g)',
+                lowSalt: 0.3,
+                emoji: '🧀',
+                reason: 'Ottime proteine ma con l\'86% di sale in meno!'
+            },
+            {
+                highName: '2 Fette di Pane comune (100g)',
+                highSalt: 1.2,
+                lowName: '2 Fette di Pane Toscano sciocco (100g)',
+                lowSalt: 0.0,
+                emoji: '🥖',
+                reason: 'Azzera il primo fornitore nascosto di sodio nella dieta italiana.'
+            },
+            {
+                highName: 'Mezzo Dado da brodo classico',
+                highSalt: 2.0,
+                lowName: 'Soffritto cipolla, carota, sedano, erbe e curcuma',
+                lowSalt: 0.05,
+                emoji: '🌿',
+                reason: 'Sapore ricco e profumato risparmiando 2 grammi netti di sale.'
+            },
+            {
+                highName: 'Legumi in scatola versati direttamente',
+                highSalt: 1.1,
+                lowName: 'Legumi in scatola sciacquati 30s sotto l\'acqua',
+                lowSalt: 0.4,
+                emoji: '🚿',
+                reason: 'Basta uno scolapasta per eliminare il 60% del liquido salato di governo.'
+            }
+        ];
+
+        // ============================================================================
+        // 2. APPLICATION STATE & STORAGE
+        // ============================================================================
+        const STORAGE_KEY = 'salezero_cardiosalt_v1';
+
+        let appState = {
+            dailyLimitSaltGrams: 3.75,
+            limitPreset: '3.75',
+            darkMode: false,
+            activeMeal: getSuggestedMealByHour(),
+            portionMultiplier: 1,
+            activeCategory: 'tutti',
+            labelInputMode: 'salt',
+            newFoodEmoji: '🥣',
+            customFoods: [],
+            medicationConfig: {
+                eveningEnabled: true,
+                eveningName: 'Pastiglia Pressione Sera',
+                eveningDose: '1 compressa',
+                eveningTime: '22:30',
+                morningEnabled: false,
+                morningName: 'Pastiglia Mattina',
+                morningDose: '1 compressa',
+                morningTime: '08:00',
+                snoozedUntil: 0,
+                lastAlertedDate: ''
+            },
+            days: {} // YYYY-MM-DD -> { entries: [], water: 0, medEveningTaken: false, medEveningTime: '', medMorningTaken: false, medMorningTime: '', potassiumItems: [], bpReadings: [] }
+        };
+
+        let selectedDateKey = getTodayDateKey();
+        let undoStack = [];
+        let toastTimeout = null;
+        let deferredPwaPrompt = null;
+        let bpTimerInterval = null;
+        let bpTimerSecondsLeft = 60;
+
+        // ============================================================================
+        // 3. DATE & UTILITY HELPERS
+        // ============================================================================
+        function getTodayDateKey() {
+            return formatDateKey(new Date());
+        }
+
+        function formatDateKey(dateObj) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function parseDateKey(key) {
+            const [y, m, d] = key.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        }
+
+        function formatHumanDate(key) {
+            const todayKey = getTodayDateKey();
+            if (key === todayKey) return 'Oggi';
+            const d = parseDateKey(key);
+            const today = parseDateKey(todayKey);
+            const diffDays = Math.round((d - today) / (1000 * 60 * 60 * 24));
+            if (diffDays === -1) return 'Ieri';
+            return d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
+        }
+
+        function getSuggestedMealByHour() {
+            const h = new Date().getHours();
+            if (h >= 5 && h < 11) return 'colazione';
+            if (h >= 11 && h < 15) return 'pranzo';
+            if (h >= 18 && h < 23) return 'cena';
+            return 'spuntino';
+        }
+
+        function saltToSodiumMg(saltGrams) {
+            return Math.round(saltGrams * 400);
+        }
+
+        function ensureDayRecord(dateKey) {
+            if (!appState.days[dateKey]) {
+                appState.days[dateKey] = {
+                    entries: [],
+                    water: 0,
+                    medTaken: false,
+                    medEveningTaken: false,
+                    medEveningTime: '',
+                    medMorningTaken: false,
+                    medMorningTime: '',
+                    potassiumItems: [],
+                    bpReadings: []
+                };
+            }
+            const rec = appState.days[dateKey];
+            // Backward compatibility migration
+            if (rec.medTaken && rec.medEveningTaken === undefined) {
+                rec.medEveningTaken = true;
+            }
+            if (!Array.isArray(rec.potassiumItems)) rec.potassiumItems = [];
+            if (!Array.isArray(rec.bpReadings)) rec.bpReadings = [];
+            if (!Array.isArray(rec.entries)) rec.entries = [];
+            return rec;
+        }
+
+        // ============================================================================
+        // 4. LOCALSTORAGE & DARK MODE
+        // ============================================================================
+        function loadState() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    appState = {
+                        ...appState,
+                        ...parsed,
+                        medicationConfig: {
+                            ...appState.medicationConfig,
+                            ...(parsed.medicationConfig || {})
+                        },
+                        activeMeal: getSuggestedMealByHour(),
+                        portionMultiplier: 1
+                    };
+                }
+            } catch (err) {
+                console.error('Errore caricamento localStorage:', err);
+            }
+            ensureDayRecord(selectedDateKey);
+            applyDarkModeClass();
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (err) {
+                console.error('Errore salvataggio localStorage:', err);
+            }
+        }
+
+        function toggleDarkMode() {
+            appState.darkMode = !appState.darkMode;
+            applyDarkModeClass();
+            saveState();
+        }
+
+        function applyDarkModeClass() {
+            const htmlEl = document.documentElement;
+            const iconEl = document.getElementById('themeIcon');
+            if (appState.darkMode) {
+                htmlEl.classList.add('dark');
+                if (iconEl) iconEl.setAttribute('data-lucide', 'sun');
+            } else {
+                htmlEl.classList.remove('dark');
+                if (iconEl) iconEl.setAttribute('data-lucide', 'moon');
+            }
+            lucide.createIcons();
+        }
+
+        // ============================================================================
+        // 5. PWA SETUP (MANIFEST, ICONS, INSTALL PROMPT & BACKUP)
+        // ============================================================================
+        function setupPwaEnvironment() {
+            const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                <defs>
+                    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#f43f5e"/>
+                        <stop offset="100%" stop-color="#dc2626"/>
+                    </linearGradient>
+                </defs>
+                <rect width="512" height="512" rx="120" fill="url(#g)"/>
+                <path d="M256 392s-128-78-128-172c0-46 36-82 82-82 28 0 46 16 46 16s18-16 46-16c46 0 82 36 82 82 0 94-128 172-128 172z" fill="#fff"/>
+                <path d="M160 256h55l22-45 32 90 22-45h61" fill="none" stroke="#e11d48" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>`;
+            const iconUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgIcon);
+
+            document.getElementById('appFavicon').href = iconUrl;
+            document.getElementById('appleTouchIcon').href = iconUrl;
+
+            const manifestObj = {
+                name: 'SaleZero / CardioSalt — Controllo Sale, Pressione & Terapia',
+                short_name: 'SaleZero',
+                description: 'App rapida per ipertensione: contatore sale/sodio 1-tap, pressione e promemoria pastiglia serale.',
+                start_url: './',
+                display: 'standalone',
+                background_color: '#0f172a',
+                theme_color: '#e11d48',
+                icons: [
+                    { src: iconUrl, sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable' },
+                    { src: iconUrl, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }
+                ]
+            };
+
+            const blob = new Blob([JSON.stringify(manifestObj)], { type: 'application/manifest+json' });
+            document.getElementById('pwaManifestLink').href = URL.createObjectURL(blob);
+
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPwaPrompt = e;
+                const btn = document.getElementById('nativePwaInstallBtn');
+                if (btn) btn.classList.remove('hidden');
+            });
+        }
+
+        function openPwaModal() {
+            document.getElementById('pwaModal').classList.remove('hidden');
+        }
+
+        function closePwaModal() {
+            document.getElementById('pwaModal').classList.add('hidden');
+        }
+
+        async function triggerNativePwaInstall() {
+            if (!deferredPwaPrompt) {
+                showToast('Segui le istruzioni qui sotto per aggiungere l\'icona alla schermata Home', false);
+                return;
+            }
+            deferredPwaPrompt.prompt();
+            await deferredPwaPrompt.userChoice;
+            deferredPwaPrompt = null;
+            document.getElementById('nativePwaInstallBtn').classList.add('hidden');
+        }
+
+        function downloadStandaloneAppFile() {
+            const htmlContent = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+            const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'SaleZero_CardioSalt_App.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast('File App scaricato! Aprilo sul telefono e aggiungilo alla schermata Home.', false);
+        }
+
+        function exportBackupJson() {
+            const dataStr = JSON.stringify(appState, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `SaleZero_Backup_${getTodayDateKey()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast('Backup esportato con successo!', false);
+        }
+
+        function importBackupJson(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (imported && imported.days) {
+                        appState = { ...appState, ...imported };
+                        saveState();
+                        applyDarkModeClass();
+                        renderAll();
+                        closePwaModal();
+                        showToast('Backup ripristinato con successo!', false);
+                    }
+                } catch (err) {
+                    showToast('File di backup non valido', false);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // ============================================================================
+        // 6. BEDTIME PILL REMINDER, WEB AUDIO CHIME & .ICS ALARM GENERATOR
+        // ============================================================================
+        function playGentleAlarmSound() {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                const ctx = new AudioCtx();
+                const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6 pleasant chord
+                notes.forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.14);
+                    gain.gain.setValueAtTime(0.001, ctx.currentTime + idx * 0.14);
+                    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + idx * 0.14 + 0.04);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + idx * 0.14 + 0.55);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + idx * 0.14);
+                    osc.stop(ctx.currentTime + idx * 0.14 + 0.6);
+                });
+            } catch (e) {
+                console.warn('Web Audio non riproducibile:', e);
+            }
+        }
+
+        function renderTherapyCard() {
+            const cfg = appState.medicationConfig;
+            const dayData = ensureDayRecord(selectedDateKey);
+
+            document.getElementById('medScheduleSubtitle').textContent =
+                `Promemoria pre-sonno ore ${cfg.eveningTime || '22:30'}${cfg.morningEnabled ? ` • Mattina ${cfg.morningTime}` : ''}`;
+
+            const slotsContainer = document.getElementById('pillSlotsContainer');
+            let slotsHtml = '';
+
+            // Evening Bedtime Slot (Primary)
+            if (cfg.eveningEnabled !== false) {
+                const isTaken = !!dayData.medEveningTaken;
+                slotsHtml += `
+                    <div class="p-3 rounded-2xl border transition flex items-center justify-between gap-2 ${
+                        isTaken
+                            ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/80'
+                            : 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-200/80 dark:border-indigo-800'
+                    }">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="text-xl shrink-0">${isTaken ? '✅' : '🌙'}</span>
+                            <div class="min-w-0">
+                                <div class="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                    ${cfg.eveningName || 'Pastiglia Pressione Sera'}
+                                </div>
+                                <div class="text-[11px] font-medium ${isTaken ? 'text-emerald-700 dark:text-emerald-300' : 'text-indigo-700 dark:text-indigo-300'}">
+                                    ${isTaken ? `Presa alle ${dayData.medEveningTime || 'sera'} ✓` : `Prima di dormire (${cfg.eveningTime}) • ${cfg.eveningDose}`}
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="togglePillSlot('evening')" class="shrink-0 px-3.5 py-2 rounded-xl text-xs font-extrabold active:scale-95 transition ${
+                            isTaken
+                                ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700'
+                                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shadow-indigo-600/20'
+                        }">
+                            ${isTaken ? 'Segnata ✓' : 'Segna Presa'}
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Optional Morning Slot
+            if (cfg.morningEnabled) {
+                const isMornTaken = !!dayData.medMorningTaken;
+                slotsHtml += `
+                    <div class="p-3 rounded-2xl border transition flex items-center justify-between gap-2 ${
+                        isMornTaken
+                            ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/80'
+                            : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                    }">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="text-xl shrink-0">${isMornTaken ? '✅' : '🌅'}</span>
+                            <div class="min-w-0">
+                                <div class="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                                    ${cfg.morningName || 'Pastiglia Mattina'}
+                                </div>
+                                <div class="text-[11px] text-slate-500 dark:text-slate-400">
+                                    ${isMornTaken ? `Presa alle ${dayData.medMorningTime || 'mattina'} ✓` : `Ore ${cfg.morningTime}`}
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="togglePillSlot('morning')" class="shrink-0 px-3 py-1.5 rounded-xl text-xs font-extrabold active:scale-95 transition ${
+                            isMornTaken
+                                ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-200'
+                                : 'bg-sky-600 text-white'
+                        }">
+                            ${isMornTaken ? 'Segnata ✓' : 'Segna Presa'}
+                        </button>
+                    </div>
+                `;
+            }
+
+            slotsContainer.innerHTML = slotsHtml;
+
+            // Render 7-Day Adherence Dots
+            const last7 = getLastNDaysKeys(7).reverse();
+            const dotsEl = document.getElementById('adherenceDotsRow');
+            dotsEl.innerHTML = last7.map(k => {
+                const d = appState.days[k];
+                const taken = d && (d.medEveningTaken || d.medTaken);
+                const dayLetter = parseDateKey(k).toLocaleDateString('it-IT', { weekday: 'narrow' }).toUpperCase();
+                return `
+                    <div title="${formatHumanDate(k)}: ${taken ? 'Pastiglia Presa' : 'Non segnata'}" class="w-5 h-5 rounded-full text-[9px] font-black flex items-center justify-center border ${
+                        taken
+                            ? 'bg-emerald-500 text-white border-emerald-600'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
+                    }">
+                        ${dayLetter}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function togglePillSlot(slot) {
+            const dayData = ensureDayRecord(selectedDateKey);
+            const nowStr = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+
+            if (slot === 'evening') {
+                dayData.medEveningTaken = !dayData.medEveningTaken;
+                dayData.medTaken = dayData.medEveningTaken;
+                dayData.medEveningTime = dayData.medEveningTaken ? nowStr : '';
+                if (dayData.medEveningTaken) {
+                    playGentleAlarmSound();
+                    showToast('Ottimo! Pastiglia della sera segnata come presa ✅', false);
+                }
+            } else {
+                dayData.medMorningTaken = !dayData.medMorningTaken;
+                dayData.medMorningTime = dayData.medMorningTaken ? nowStr : '';
+            }
+
+            saveState();
+            checkBedtimePillReminder();
+            renderAll();
+        }
+
+        function takePillNow(slot) {
+            selectedDateKey = getTodayDateKey();
+            const dayData = ensureDayRecord(selectedDateKey);
+            const nowStr = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            dayData.medEveningTaken = true;
+            dayData.medTaken = true;
+            dayData.medEveningTime = nowStr;
+            saveState();
+            playGentleAlarmSound();
+            checkBedtimePillReminder();
+            renderAll();
+            showToast('Pastiglia della sera registrata! Buonanotte 🌙', false);
+        }
+
+        function snoozePillReminder(minutes) {
+            appState.medicationConfig.snoozedUntil = Date.now() + minutes * 60 * 1000;
+            saveState();
+            document.getElementById('urgentPillBanner').classList.add('hidden');
+            showToast(`Promemoria posticipato di ${minutes} minuti ⏰`, false);
+        }
+
+        function checkBedtimePillReminder() {
+            const cfg = appState.medicationConfig;
+            const banner = document.getElementById('urgentPillBanner');
+            const todayData = ensureDayRecord(getTodayDateKey());
+
+            if (!cfg.eveningEnabled || todayData.medEveningTaken) {
+                banner.classList.add('hidden');
+                return;
+            }
+
+            if (cfg.snoozedUntil && Date.now() < cfg.snoozedUntil) {
+                banner.classList.add('hidden');
+                return;
+            }
+
+            const now = new Date();
+            const [targetH, targetM] = (cfg.eveningTime || '22:30').split(':').map(Number);
+            const nowMinutes = now.getHours() * 60 + now.getMinutes();
+            const targetMinutes = targetH * 60 + targetM;
+
+            // Show urgent banner if within 20 minutes before target time, or past target time up to 3:00 AM
+            const isEveningWindow = (nowMinutes >= targetMinutes - 20) || (now.getHours() < 4);
+
+            if (isEveningWindow) {
+                document.getElementById('urgentBannerTime').textContent = cfg.eveningTime;
+                document.getElementById('urgentBannerTitle').textContent =
+                    `È ora di prendere: ${cfg.eveningName} (${cfg.eveningDose}) prima di dormire!`;
+                banner.classList.remove('hidden');
+
+                // Fire sound + browser notification once when reaching exact target time
+                const alertStamp = `${getTodayDateKey()}_${cfg.eveningTime}`;
+                if (nowMinutes >= targetMinutes && cfg.lastAlertedDate !== alertStamp) {
+                    cfg.lastAlertedDate = alertStamp;
+                    saveState();
+                    playGentleAlarmSound();
+                    sendBrowserNotification(
+                        '🌙 Promemoria Pastiglia Prima di Dormire',
+                        `Ricordati di assumere ${cfg.eveningName} (${cfg.eveningDose}).`
+                    );
+                }
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function openTherapyModal() {
+            const cfg = appState.medicationConfig;
+            document.getElementById('cfgEveningEnabled').checked = cfg.eveningEnabled !== false;
+            document.getElementById('cfgEveningName').value = cfg.eveningName || 'Pastiglia Pressione Sera';
+            document.getElementById('cfgEveningDose').value = cfg.eveningDose || '1 compressa';
+            document.getElementById('cfgEveningTime').value = cfg.eveningTime || '22:30';
+
+            document.getElementById('cfgMorningEnabled').checked = !!cfg.morningEnabled;
+            document.getElementById('cfgMorningName').value = cfg.morningName || 'Pastiglia Mattina';
+            document.getElementById('cfgMorningTime').value = cfg.morningTime || '08:00';
+
+            document.getElementById('therapyModal').classList.remove('hidden');
+        }
+
+        function closeTherapyModal() {
+            document.getElementById('therapyModal').classList.add('hidden');
+        }
+
+        function saveTherapySettings() {
+            const cfg = appState.medicationConfig;
+            cfg.eveningEnabled = document.getElementById('cfgEveningEnabled').checked;
+            cfg.eveningName = document.getElementById('cfgEveningName').value.trim() || 'Pastiglia Pressione Sera';
+            cfg.eveningDose = document.getElementById('cfgEveningDose').value.trim() || '1 compressa';
+            cfg.eveningTime = document.getElementById('cfgEveningTime').value || '22:30';
+
+            cfg.morningEnabled = document.getElementById('cfgMorningEnabled').checked;
+            cfg.morningName = document.getElementById('cfgMorningName').value.trim() || 'Pastiglia Mattina';
+            cfg.morningTime = document.getElementById('cfgMorningTime').value || '08:00';
+            cfg.snoozedUntil = 0;
+
+            saveState();
+            closeTherapyModal();
+            checkBedtimePillReminder();
+            renderAll();
+            showToast(`Promemoria serale salvato per le ore ${cfg.eveningTime}`, false);
+        }
+
+        async function requestBrowserNotificationPermission() {
+            if (!('Notification' in window)) {
+                showToast('Usa il pulsante "Sveglia Nativa (.ics)" per questo telefono', false);
+                return;
+            }
+            const perm = await Notification.requestPermission();
+            if (perm === 'granted') {
+                document.getElementById('notifBtnLabel').textContent = 'Notifiche Attive ✓';
+                sendBrowserNotification('SaleZero — Notifiche Attive', 'Ti avviseremo all\'orario della pastiglia serale!');
+                playGentleAlarmSound();
+            } else {
+                showToast('Permesso notifiche non concesso dal browser', false);
+            }
+        }
+
+        function sendBrowserNotification(title, body) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    new Notification(title, { body });
+                } catch (e) {
+                    console.warn(e);
+                }
+            }
+        }
+
+        function testMedicationReminderNow() {
+            playGentleAlarmSound();
+            const cfg = appState.medicationConfig;
+            document.getElementById('urgentBannerTime').textContent = cfg.eveningTime || '22:30';
+            document.getElementById('urgentBannerTitle').textContent =
+                `TEST PROMEMORIA: ${cfg.eveningName} (${cfg.eveningDose}) prima di andare a letto!`;
+            document.getElementById('urgentPillBanner').classList.remove('hidden');
+            sendBrowserNotification('🌙 Promemoria Pastiglia Sera', `È ora di prendere ${cfg.eveningName} (${cfg.eveningDose})`);
+            showToast('Avviso acustico e banner di prova attivati!', false);
+        }
+
+        function downloadMedicationICS() {
+            const cfg = appState.medicationConfig;
+            const [hh, mm] = (cfg.eveningTime || '22:30').split(':').map(Number);
+            const now = new Date();
+            const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0);
+
+            const pad = n => String(n).padStart(2, '0');
+            const dtStart = `${start.getFullYear()}${pad(start.getMonth() + 1)}${pad(start.getDate())}T${pad(hh)}${pad(mm)}00`;
+
+            const icsLines = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//SaleZero CardioSalt//IT',
+                'BEGIN:VEVENT',
+                `DTSTART:${dtStart}`,
+                'DURATION:PT10M',
+                'RRULE:FREQ=DAILY',
+                `SUMMARY:💊 ${cfg.eveningName || 'Pastiglia Pressione Sera'} (${cfg.eveningDose || '1 compressa'})`,
+                'DESCRIPTION:Promemoria giornaliero pre-sonno generato da SaleZero / CardioSalt.',
+                'BEGIN:VALARM',
+                'TRIGGER:-PT0M',
+                'ACTION:DISPLAY',
+                'DESCRIPTION:Ricordati la pastiglia prima di andare a letto!',
+                'END:VALARM',
+                'END:VEVENT',
+                'END:VCALENDAR'
+            ];
+
+            const blob = new Blob([icsLines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'Promemoria_Pastiglia_Sera.ics';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showToast('File sveglia (.ics) creato! Aprilo per salvarlo nel Calendario del telefono.', false);
+        }
+
+        function openGoogleCalendarReminder() {
+            const cfg = appState.medicationConfig;
+            const [hh, mm] = (cfg.eveningTime || '22:30').split(':').map(Number);
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const ymd = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+            const startStr = `${ymd}T${pad(hh)}${pad(mm)}00`;
+            const endStr = `${ymd}T${pad(hh)}${pad(Math.min(59, mm + 10))}00`;
+
+            const title = encodeURIComponent(`💊 ${cfg.eveningName} (${cfg.eveningDose})`);
+            const details = encodeURIComponent('Promemoria giornaliero prima di andare a letto - SaleZero / CardioSalt');
+            const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startStr}/${endStr}&details=${details}&recur=RRULE:FREQ=DAILY`;
+            window.open(url, '_blank');
+        }
+
+        // ============================================================================
+        // 7. DASHBOARD & POTASSIUM SHIELD RENDERING
+        // ============================================================================
+        function renderDashboard() {
+            const dayData = ensureDayRecord(selectedDateKey);
+            const totalSalt = dayData.entries.reduce((acc, item) => acc + item.saltGrams, 0);
+            const totalSodium = saltToSodiumMg(totalSalt);
+            const limitSalt = appState.dailyLimitSaltGrams || 3.75;
+            const limitSodium = saltToSodiumMg(limitSalt);
+            const percentage = limitSalt > 0 ? Math.round((totalSalt / limitSalt) * 100) : 0;
+
+            document.getElementById('currentDateLabel').textContent = formatHumanDate(selectedDateKey);
+            document.getElementById('nextDayBtn').disabled = (selectedDateKey >= getTodayDateKey());
+
+            const limitSel = document.getElementById('limitSelector');
+            if (appState.limitPreset === '3.75' || appState.limitPreset === '5.0') {
+                limitSel.value = appState.limitPreset;
+                document.getElementById('customLimitBox').classList.add('hidden');
+            } else {
+                limitSel.value = 'custom';
+            }
+
+            document.getElementById('saltGramsDisplay').textContent = totalSalt.toFixed(2);
+            document.getElementById('saltPercentDisplay').textContent = `${percentage}% del limite`;
+            document.getElementById('sodiumMgDisplay').textContent = totalSodium;
+            document.getElementById('sodiumLimitDisplay').textContent = `/ ${limitSodium} mg`;
+
+            const remainingSalt = limitSalt - totalSalt;
+            const remainingBox = document.getElementById('remainingBox');
+            const remainingLabel = document.getElementById('remainingLabel');
+            const remainingSaltDisplay = document.getElementById('remainingSaltDisplay');
+            const remainingSodiumDisplay = document.getElementById('remainingSodiumDisplay');
+
+            if (remainingSalt >= 0) {
+                remainingLabel.textContent = 'Margine Rimanente';
+                remainingSaltDisplay.textContent = `${remainingSalt.toFixed(2)} g`;
+                remainingSodiumDisplay.textContent = `(${saltToSodiumMg(remainingSalt)} mg Na)`;
+            } else {
+                const overSalt = Math.abs(remainingSalt);
+                remainingLabel.textContent = 'Limite Superato di';
+                remainingSaltDisplay.textContent = `+${overSalt.toFixed(2)} g`;
+                remainingSodiumDisplay.textContent = `(+${saltToSodiumMg(overSalt)} mg Na)`;
+            }
+
+            const circumference = 314.16;
+            const clampedRatio = Math.min(totalSalt / limitSalt, 1);
+            const offset = circumference - (clampedRatio * circumference);
+            const gaugeRing = document.getElementById('gaugeRing');
+            gaugeRing.style.strokeDashoffset = offset;
+
+            const trafficBadge = document.getElementById('trafficBadge');
+            const trafficDot = document.getElementById('trafficDot');
+            const trafficText = document.getElementById('trafficText');
+            const percentLabel = document.getElementById('saltPercentDisplay');
+
+            if (percentage < 60) {
+                gaugeRing.setAttribute('stroke', '#10b981');
+                trafficBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800';
+                trafficDot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+                trafficText.textContent = 'Zona Sicura (<60%)';
+                percentLabel.className = 'text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-1';
+                remainingBox.className = 'p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/50 border border-emerald-200/70 dark:border-emerald-800 flex items-center justify-between';
+            } else if (percentage <= 90) {
+                gaugeRing.setAttribute('stroke', '#f59e0b');
+                trafficBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800';
+                trafficDot.className = 'w-2 h-2 rounded-full bg-amber-500 animate-pulse';
+                trafficText.textContent = 'Attenzione (60-90%)';
+                percentLabel.className = 'text-[11px] font-bold text-amber-600 dark:text-amber-400 mt-1';
+                remainingBox.className = 'p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/50 border border-amber-200/70 dark:border-amber-800 flex items-center justify-between';
+            } else {
+                gaugeRing.setAttribute('stroke', '#e11d48');
+                trafficBadge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800';
+                trafficDot.className = 'w-2 h-2 rounded-full bg-rose-600 animate-ping';
+                trafficText.textContent = percentage >= 100 ? 'Limite Superato!' : 'Limite Vicino (>90%)';
+                percentLabel.className = 'text-[11px] font-bold text-rose-600 dark:text-rose-400 mt-1';
+                remainingBox.className = 'p-3 rounded-2xl bg-rose-50/80 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-center justify-between';
+            }
+
+            document.getElementById('waterCountDisplay').textContent = `${dayData.water || 0} / 8 💧`;
+
+            const hasUndo = undoStack.length > 0;
+            document.getElementById('headerUndoBtn').classList.toggle('hidden', !hasUndo);
+            document.getElementById('headerUndoBtn').classList.toggle('inline-flex', hasUndo);
+            document.getElementById('diaryUndoBtn').classList.toggle('hidden', !hasUndo);
+            document.getElementById('diaryUndoBtn').classList.toggle('inline-flex', hasUndo);
+        }
+
+        function renderPotassiumShield() {
+            const dayData = ensureDayRecord(selectedDateKey);
+            const selectedIds = dayData.potassiumItems || [];
+            const count = selectedIds.length;
+            const pct = Math.min(100, Math.round((count / 4) * 100));
+
+            document.getElementById('potassiumBadge').textContent = `${count} / 4 🛡️`;
+            document.getElementById('potassiumProgressBar').style.width = `${pct}%`;
+
+            const grid = document.getElementById('potassiumGrid');
+            grid.innerHTML = POTASSIUM_FOODS.map(k => {
+                const active = selectedIds.includes(k.id);
+                return `
+                    <button onclick="togglePotassiumItem('${k.id}')" class="p-2 rounded-2xl border text-center transition active:scale-95 flex flex-col items-center justify-center gap-0.5 ${
+                        active
+                            ? 'bg-emerald-50 dark:bg-emerald-950/80 border-emerald-500 text-emerald-900 dark:text-emerald-200 font-extrabold shadow-xs'
+                            : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-semibold'
+                    }">
+                        <span class="text-lg leading-none">${k.emoji}</span>
+                        <span class="text-[10px] leading-tight mt-0.5">${k.name}</span>
+                        <span class="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">${active ? '✓ Preso' : `+${k.kMg}mg K`}</span>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function togglePotassiumItem(kId) {
+            const dayData = ensureDayRecord(selectedDateKey);
+            const idx = dayData.potassiumItems.indexOf(kId);
+            if (idx === -1) {
+                dayData.potassiumItems.push(kId);
+                showToast('Scudo Potassio aggiornato! Ottimo per bilanciare il sodio 🛡️', false);
+            } else {
+                dayData.potassiumItems.splice(idx, 1);
+            }
+            saveState();
+            renderPotassiumShield();
+        }
+
+        function handleLimitChange(val) {
+            if (val === 'custom') {
+                document.getElementById('customLimitBox').classList.remove('hidden');
+                document.getElementById('customLimitInput').value = appState.dailyLimitSaltGrams;
+            } else {
+                document.getElementById('customLimitBox').classList.add('hidden');
+                appState.limitPreset = val;
+                appState.dailyLimitSaltGrams = parseFloat(val);
+                saveState();
+                renderAll();
+            }
+        }
+
+        function saveCustomLimit() {
+            const val = parseFloat(document.getElementById('customLimitInput').value);
+            if (!isNaN(val) && val >= 0.5 && val <= 20) {
+                appState.limitPreset = 'custom';
+                appState.dailyLimitSaltGrams = val;
+                document.getElementById('customLimitBox').classList.add('hidden');
+                saveState();
+                renderAll();
+                showToast(`Limite impostato a ${val.toFixed(2)}g di sale (${saltToSodiumMg(val)}mg Na)`, false);
+            }
+        }
+
+        function addWater(delta) {
+            const dayData = ensureDayRecord(selectedDateKey);
+            dayData.water = Math.max(0, (dayData.water || 0) + delta);
+            saveState();
+            renderDashboard();
+        }
+
+        function changeDate(offsetDays) {
+            const current = parseDateKey(selectedDateKey);
+            current.setDate(current.getDate() + offsetDays);
+            const nextKey = formatDateKey(current);
+            if (nextKey > getTodayDateKey()) return;
+            selectedDateKey = nextKey;
+            ensureDayRecord(selectedDateKey);
+            renderAll();
+        }
+
+        function resetToToday() {
+            selectedDateKey = getTodayDateKey();
+            ensureDayRecord(selectedDateKey);
+            renderAll();
+        }
+
+        // ============================================================================
+        // 8. 1-TAP QUICK ENTRY ENGINE & DIARY
+        // ============================================================================
+        function setActiveMeal(meal) {
+            appState.activeMeal = meal;
+            renderMealAndPortionSelectors();
+        }
+
+        function setPortionMultiplier(mult) {
+            appState.portionMultiplier = mult;
+            renderMealAndPortionSelectors();
+            renderFoodGrid();
+        }
+
+        function setFoodCategory(cat) {
+            appState.activeCategory = cat;
+            renderCategoryPills();
+            renderFoodGrid();
+        }
+
+        function clearFoodSearch() {
+            document.getElementById('foodSearchInput').value = '';
+            renderFoodGrid();
+        }
+
+        function renderMealAndPortionSelectors() {
+            document.querySelectorAll('.meal-btn').forEach(btn => {
+                const isSelected = btn.getAttribute('data-meal') === appState.activeMeal;
+                if (isSelected) {
+                    btn.className = 'meal-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl border-2 border-sky-600 bg-sky-50 dark:bg-sky-950/80 text-sky-900 dark:text-sky-200 text-xs font-extrabold transition active:scale-95 shadow-xs';
+                } else {
+                    btn.className = 'meal-btn flex flex-col items-center justify-center py-2 px-1 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-100 text-xs font-bold transition active:scale-95';
+                }
+            });
+
+            const labels = {
+                '0.5': '0.5x (Mezza porzione)',
+                '1': '1x (Porzione standard)',
+                '1.5': '1.5x (Porzione abbondante)',
+                '2': '2x (Doppia porzione)'
+            };
+            document.getElementById('multiplierHint').textContent = labels[String(appState.portionMultiplier)] || '1x';
+
+            document.querySelectorAll('.mult-btn').forEach(btn => {
+                const isSelected = parseFloat(btn.getAttribute('data-mult')) === appState.portionMultiplier;
+                if (isSelected) {
+                    btn.className = 'mult-btn py-2 px-2 rounded-xl border-2 border-amber-500 bg-amber-50 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 text-xs font-extrabold transition active:scale-95 shadow-xs';
+                } else {
+                    btn.className = 'mult-btn py-2 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 hover:bg-slate-100 text-xs font-bold transition active:scale-95';
+                }
+            });
+        }
+
+        function renderCategoryPills() {
+            document.querySelectorAll('.cat-pill').forEach(btn => {
+                const isSelected = btn.getAttribute('data-cat') === appState.activeCategory;
+                if (isSelected) {
+                    btn.className = 'cat-pill shrink-0 px-3 py-1.5 rounded-xl text-xs font-extrabold bg-slate-900 dark:bg-sky-600 text-white border border-slate-900 dark:border-sky-500 transition shadow-xs';
+                } else {
+                    btn.className = 'cat-pill shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200/70 transition';
+                }
+            });
+        }
+
+        function getAllFoods() {
+            return [...appState.customFoods, ...DEFAULT_FOODS];
+        }
+
+        function renderFoodGrid() {
+            const searchVal = (document.getElementById('foodSearchInput').value || '').trim().toLowerCase();
+            document.getElementById('clearSearchBtn').classList.toggle('hidden', searchVal.length === 0);
+
+            const allFoods = getAllFoods();
+            const filtered = allFoods.filter(item => {
+                if (searchVal.length > 0) {
+                    return item.name.toLowerCase().includes(searchVal) || item.portion.toLowerCase().includes(searchVal);
+                }
+                if (appState.activeCategory === 'tutti') return true;
+                if (appState.activeCategory === 'preferiti') return item.isCustom === true || item.isFavorite === true;
+                return item.category === appState.activeCategory;
+            });
+
+            const grid = document.getElementById('foodGrid');
+            if (filtered.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full py-6 text-center text-slate-500 text-xs space-y-2">
+                        <p class="font-bold">Nessun alimento trovato in questa vista.</p>
+                        <button onclick="openCustomFoodModal()" class="px-3 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 font-bold border border-sky-200 dark:border-sky-800">
+                            + Aggiungi Cibo Personalizzato
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            const mult = appState.portionMultiplier;
+
+            grid.innerHTML = filtered.map(food => {
+                const effectiveSalt = +(food.saltGrams * mult).toFixed(2);
+                const effectiveSodium = saltToSodiumMg(effectiveSalt);
+
+                let badgeClass = 'bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+                if (effectiveSalt >= 1.5) {
+                    badgeClass = 'bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800';
+                } else if (effectiveSalt >= 0.6) {
+                    badgeClass = 'bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+                }
+
+                const multBadge = mult !== 1 ? `<span class="text-[10px] font-black text-amber-600 ml-0.5">(${mult}x)</span>` : '';
+
+                return `
+                    <button onclick="tapAddFood('${food.id}')" class="tap-card group text-left p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/70 hover:bg-sky-50/60 dark:hover:bg-slate-800 border border-slate-200/90 dark:border-slate-700 hover:border-sky-300 flex flex-col justify-between gap-2 relative overflow-hidden">
+                        <div class="flex items-start justify-between gap-1.5 w-full">
+                            <span class="text-xl leading-none">${food.emoji || '🍽️'}</span>
+                            <span class="px-2 py-0.5 rounded-lg text-[11px] font-extrabold border ${badgeClass}">
+                                +${effectiveSalt}g
+                            </span>
+                        </div>
+                        <div>
+                            <div class="font-extrabold text-xs text-slate-900 dark:text-white leading-snug line-clamp-2">
+                                ${food.name}
+                            </div>
+                            <div class="text-[10px] font-medium text-slate-500 dark:text-slate-400 mt-0.5">
+                                ${food.portion} ${multBadge} • ${effectiveSodium}mg Na
+                            </div>
+                        </div>
+                    </button>
+                `;
+            }).join('');
+        }
+
+        function tapAddFood(foodId) {
+            const food = getAllFoods().find(f => f.id === foodId);
+            if (!food) return;
+
+            const mult = appState.portionMultiplier;
+            const addedSalt = +(food.saltGrams * mult).toFixed(2);
+            addCustomEntryDirectly(food.name, food.emoji || '🍽️', mult === 1 ? food.portion : `${mult}x (${food.portion})`, addedSalt, food.saltGrams, mult);
+        }
+
+        function addCustomEntryDirectly(name, emoji, portionLabel, saltGrams, baseSalt = saltGrams, mult = 1) {
+            const newEntry = {
+                entryId: 'entry_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                name,
+                emoji,
+                meal: appState.activeMeal,
+                portionLabel,
+                multiplier: mult,
+                baseSaltGrams: baseSalt,
+                saltGrams: +saltGrams.toFixed(2),
+                timestamp: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+            };
+
+            const dayData = ensureDayRecord(selectedDateKey);
+            dayData.entries.push(newEntry);
+
+            undoStack.push({
+                type: 'add_entry',
+                dateKey: selectedDateKey,
+                entryId: newEntry.entryId,
+                label: name
+            });
+
+            saveState();
+            renderAll();
+
+            const centerEl = document.getElementById('gaugeCenterText');
+            if (centerEl) {
+                centerEl.classList.remove('animate-pop');
+                void centerEl.offsetWidth;
+                centerEl.classList.add('animate-pop');
+            }
+
+            showToast(`Aggiunto: ${name} (+${saltGrams.toFixed(2)}g sale)`, true);
+        }
+
+        function renderDiary() {
+            const dayData = ensureDayRecord(selectedDateKey);
+            const entries = dayData.entries || [];
+            document.getElementById('diaryCountBadge').textContent = `${entries.length} ${entries.length === 1 ? 'voce' : 'voci'}`;
+
+            const container = document.getElementById('diaryContainer');
+            if (entries.length === 0) {
+                container.innerHTML = `
+                    <div class="p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 text-center space-y-1">
+                        <p class="text-xs font-bold text-slate-600 dark:text-slate-300">Nessun alimento registrato in questa giornata.</p>
+                        <p class="text-[11px] text-slate-400">Tocca un cibo nella griglia 1-Tap qui sopra per iniziare.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const mealsOrder = [
+                { key: 'colazione', title: '☕ Colazione' },
+                { key: 'pranzo', title: '🍝 Pranzo' },
+                { key: 'cena', title: '🌙 Cena' },
+                { key: 'spuntino', title: '🍎 Spuntini & Extra' }
+            ];
+
+            let html = '';
+            mealsOrder.forEach(m => {
+                const mealEntries = entries.filter(e => e.meal === m.key);
+                if (mealEntries.length === 0) return;
+
+                const mealSalt = mealEntries.reduce((s, e) => s + e.saltGrams, 0);
+                const highMealWarn = mealSalt >= 2.0
+                    ? `<span class="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">⚠️ Pasto >2g</span>`
+                    : '';
+
+                html += `
+                    <div class="rounded-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden">
+                        <div class="bg-slate-50 dark:bg-slate-800/90 px-3.5 py-2 flex items-center justify-between border-b border-slate-200/70 dark:border-slate-700">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-xs font-extrabold text-slate-800 dark:text-slate-100">${m.title}</span>
+                                ${highMealWarn}
+                            </div>
+                            <span class="text-xs font-extrabold text-slate-700 dark:text-slate-200">${mealSalt.toFixed(2)}g sale <span class="text-[10px] font-medium text-slate-400">(${saltToSodiumMg(mealSalt)}mg Na)</span></span>
+                        </div>
+                        <div class="divide-y divide-slate-100 dark:divide-slate-800">
+                            ${mealEntries.map(item => `
+                                <div class="px-3.5 py-2.5 flex items-center justify-between gap-2 bg-white dark:bg-slate-900">
+                                    <div class="flex items-center gap-2.5 min-w-0">
+                                        <span class="text-lg shrink-0">${item.emoji || '🍽️'}</span>
+                                        <div class="min-w-0">
+                                            <div class="text-xs font-bold text-slate-900 dark:text-white truncate">${item.name}</div>
+                                            <div class="text-[11px] text-slate-500 dark:text-slate-400">
+                                                ${item.portionLabel} • <strong class="text-slate-700 dark:text-slate-200">${item.saltGrams.toFixed(2)}g</strong> (${saltToSodiumMg(item.saltGrams)}mg)
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        <button onclick="adjustDiaryEntry('${item.entryId}', -0.5)" class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-extrabold text-xs flex items-center justify-center active:scale-90 transition">-</button>
+                                        <button onclick="adjustDiaryEntry('${item.entryId}', 0.5)" class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-extrabold text-xs flex items-center justify-center active:scale-90 transition">+</button>
+                                        <button onclick="deleteDiaryEntry('${item.entryId}')" class="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 text-rose-600 dark:text-rose-400 flex items-center justify-center active:scale-90 transition ml-0.5">
+                                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function adjustDiaryEntry(entryId, deltaMultiplier) {
+            const dayData = ensureDayRecord(selectedDateKey);
+            const entry = dayData.entries.find(e => e.entryId === entryId);
+            if (!entry) return;
+
+            const newMult = +(entry.multiplier + deltaMultiplier).toFixed(2);
+            if (newMult <= 0) {
+                deleteDiaryEntry(entryId);
+                return;
+            }
+
+            entry.multiplier = newMult;
+            entry.saltGrams = +(entry.baseSaltGrams * newMult).toFixed(2);
+            entry.portionLabel = `${newMult}x porzione`;
+
+            saveState();
+            renderAll();
+        }
+
+        function deleteDiaryEntry(entryId) {
+            const dayData = ensureDayRecord(selectedDateKey);
+            const idx = dayData.entries.findIndex(e => e.entryId === entryId);
+            if (idx === -1) return;
+
+            const removed = dayData.entries.splice(idx, 1)[0];
+            undoStack.push({
+                type: 'delete_entry',
+                dateKey: selectedDateKey,
+                entry: removed,
+                label: removed.name
+            });
+
+            saveState();
+            renderAll();
+            showToast(`Rimosso: ${removed.name}`, true);
+        }
+
+        function undoLastAction() {
+            if (undoStack.length === 0) return;
+            const action = undoStack.pop();
+            const dayData = ensureDayRecord(action.dateKey);
+
+            if (action.type === 'add_entry') {
+                dayData.entries = dayData.entries.filter(e => e.entryId !== action.entryId);
+                showToast(`Annullato inserimento: ${action.label}`, false);
+            } else if (action.type === 'delete_entry' && action.entry) {
+                dayData.entries.push(action.entry);
+                showToast(`Ripristinato: ${action.label}`, false);
+            }
+
+            saveState();
+            renderAll();
+        }
+
+        // ============================================================================
+        // 9. OPENFOODFACTS LIVE SUPERMARKET SEARCH & LABEL CALCULATOR (TAB 2)
+        // ============================================================================
+        function quickOffSearch(queryText) {
+            document.getElementById('offSearchInput').value = queryText;
+            searchOpenFoodFacts();
+        }
+
+        async function searchOpenFoodFacts() {
+            const query = (document.getElementById('offSearchInput').value || '').trim();
+            if (!query) {
+                showToast('Inserisci il nome di un prodotto o un codice a barre EAN', false);
+                return;
+            }
+
+            const resultsBox = document.getElementById('offResultsContainer');
+            resultsBox.classList.remove('hidden');
+            resultsBox.innerHTML = `<div class="p-4 text-center text-xs font-bold text-slate-500 animate-pulse">🔍 Ricerca nel database prodotti italiani in corso...</div>`;
+
+            try {
+                let products = [];
+                // Check if barcode (numeric >= 8 chars)
+                if (/^\d{8,14}$/.test(query)) {
+                    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(query)}.json?fields=product_name,brands,nutriments,serving_size`);
+                    const data = await res.json();
+                    if (data && data.product) products = [data.product];
+                } else {
+                    const url = `https://it.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=8&fields=product_name,brands,nutriments,serving_size`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    products = (data && data.products) ? data.products : [];
+                }
+
+                const validProducts = products.filter(p => p.product_name && p.nutriments && (p.nutriments.salt_100g !== undefined || p.nutriments.sodium_100g !== undefined));
+
+                if (validProducts.length === 0) {
+                    resultsBox.innerHTML = `<div class="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs text-slate-500 text-center">Nessun prodotto trovato con dati di sale completi. Usa il calcolatore manuale qui sotto.</div>`;
+                    return;
+                }
+
+                resultsBox.innerHTML = validProducts.map((p, idx) => {
+                    const salt100 = p.nutriments.salt_100g !== undefined
+                        ? +parseFloat(p.nutriments.salt_100g).toFixed(2)
+                        : +(parseFloat(p.nutriments.sodium_100g || 0) * 2.5).toFixed(2);
+
+                    let semClass = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+                    if (salt100 > 1.2) semClass = 'bg-rose-100 text-rose-800 border-rose-300';
+                    else if (salt100 >= 0.3) semClass = 'bg-amber-100 text-amber-800 border-amber-300';
+
+                    const safeName = (p.product_name + (p.brands ? ` (${p.brands.split(',')[0]})` : '')).replace(/'/g, "\\'");
+
+                    return `
+                        <button onclick="selectOffProduct('${safeName}', ${salt100})" class="w-full text-left p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 transition">
+                            <div class="min-w-0">
+                                <div class="text-xs font-extrabold text-slate-900 dark:text-white truncate">${p.product_name}</div>
+                                <div class="text-[10px] text-slate-500 truncate">${p.brands || 'Supermercato'} • Tocca per caricare</div>
+                            </div>
+                            <span class="shrink-0 px-2 py-1 rounded-xl text-xs font-black border ${semClass}">
+                                ${salt100}g / 100g
+                            </span>
+                        </button>
+                    `;
+                }).join('');
+            } catch (e) {
+                resultsBox.innerHTML = `<div class="p-3 rounded-xl bg-amber-50 text-amber-800 text-xs text-center">Connessione offline: inserisci il valore manualmente qui sotto.</div>`;
+            }
+        }
+
+        function selectOffProduct(name, saltPer100g) {
+            setLabelInputMode('salt');
+            document.getElementById('labelPer100Input').value = saltPer100g;
+            document.getElementById('labelProductName').value = name;
+            calculateFromLabel();
+            showToast(`Caricato "${name}" (${saltPer100g}g sale/100g)`, false);
+        }
+
+        function setLabelInputMode(mode) {
+            appState.labelInputMode = mode;
+            const saltBtn = document.getElementById('modeSaltBtn');
+            const sodiumBtn = document.getElementById('modeSodiumBtn');
+            const titleEl = document.getElementById('labelPer100Title');
+            const unitEl = document.getElementById('labelPer100Unit');
+            const inputEl = document.getElementById('labelPer100Input');
+
+            if (mode === 'salt') {
+                saltBtn.className = 'py-2.5 px-3 rounded-xl text-xs font-extrabold transition bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm';
+                sodiumBtn.className = 'py-2.5 px-3 rounded-xl text-xs font-extrabold transition text-slate-600 dark:text-slate-400';
+                titleEl.textContent = '1. Sale per 100g di prodotto (in grammi)';
+                unitEl.textContent = 'g / 100g';
+                inputEl.placeholder = 'Es. 1.2';
+            } else {
+                sodiumBtn.className = 'py-2.5 px-3 rounded-xl text-xs font-extrabold transition bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm';
+                saltBtn.className = 'py-2.5 px-3 rounded-xl text-xs font-extrabold transition text-slate-600 dark:text-slate-400';
+                titleEl.textContent = '1. Sodio per 100g di prodotto (in milligrammi)';
+                unitEl.textContent = 'mg / 100g';
+                inputEl.placeholder = 'Es. 480';
+            }
+            calculateFromLabel();
+        }
+
+        function setQuickLabelValue(saltGramsPer100) {
+            const inputEl = document.getElementById('labelPer100Input');
+            inputEl.value = appState.labelInputMode === 'salt' ? saltGramsPer100 : saltToSodiumMg(saltGramsPer100);
+            calculateFromLabel();
+        }
+
+        function setLabelGrams(grams) {
+            document.getElementById('labelGramsEatenInput').value = grams;
+            calculateFromLabel();
+        }
+
+        function calculateFromLabel() {
+            const rawPer100 = parseFloat(document.getElementById('labelPer100Input').value) || 0;
+            const gramsEaten = parseFloat(document.getElementById('labelGramsEatenInput').value) || 0;
+
+            const saltPer100 = appState.labelInputMode === 'salt' ? rawPer100 : (rawPer100 / 400);
+            const saltConsumed = +((saltPer100 * gramsEaten) / 100).toFixed(2);
+            const sodiumConsumed = saltToSodiumMg(saltConsumed);
+            const limitPct = Math.round((saltConsumed / (appState.dailyLimitSaltGrams || 3.75)) * 100);
+
+            const badge = document.getElementById('labelDensityBadge');
+            if (rawPer100 <= 0) {
+                badge.textContent = 'Inserisci valore';
+                badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300';
+            } else if (saltPer100 < 0.3) {
+                badge.textContent = '🟢 Basso contenuto di sale';
+                badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800';
+            } else if (saltPer100 <= 1.2) {
+                badge.textContent = '🟡 Contenuto medio di sale';
+                badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800';
+            } else {
+                badge.textContent = '🔴 Alto contenuto di sale!';
+                badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800';
+            }
+
+            document.getElementById('calcSaltResult').textContent = `${saltConsumed.toFixed(2)} g`;
+            document.getElementById('calcSodiumResult').textContent = `(${sodiumConsumed} mg Sodio)`;
+            document.getElementById('calcPercentLimit').textContent = `${limitPct}% del limite`;
+
+            return { saltConsumed, gramsEaten };
+        }
+
+        function addCalculatedLabelToDiary(alsoSaveFavorite) {
+            const { saltConsumed, gramsEaten } = calculateFromLabel();
+            if (saltConsumed <= 0 && (parseFloat(document.getElementById('labelPer100Input').value) || 0) <= 0) {
+                showToast('Inserisci prima il valore letto sull\'etichetta', false);
+                return;
+            }
+
+            const customName = document.getElementById('labelProductName').value.trim() || 'Prodotto da etichetta';
+            if (alsoSaveFavorite) {
+                appState.customFoods.unshift({
+                    id: 'cust_' + Date.now(),
+                    name: customName,
+                    portion: `${gramsEaten}g`,
+                    saltGrams: saltConsumed,
+                    category: 'preferiti',
+                    emoji: '🏷️',
+                    isCustom: true
+                });
+            }
+
+            addCustomEntryDirectly(customName, '🏷️', `${gramsEaten}g`, saltConsumed);
+            switchMainTab('oggi');
+        }
+
+        // ============================================================================
+        // 10. GUIDED BLOOD PRESSURE TIMER, 2-3 READING AVERAGE & ESC/ESH (TAB 3)
+        // ============================================================================
+        function startBpRelaxTimer(seconds) {
+            if (bpTimerInterval) clearInterval(bpTimerInterval);
+            bpTimerSecondsLeft = seconds;
+            document.getElementById('stopBpTimerBtn').classList.remove('hidden');
+            document.getElementById('bpTimerCircle').classList.add('breathe-anim');
+            document.getElementById('bpTimerStatus').textContent = 'Respira lentamente... rilassa spalle e braccio.';
+            updateBpTimerDisplay();
+
+            bpTimerInterval = setInterval(() => {
+                bpTimerSecondsLeft--;
+                updateBpTimerDisplay();
+                if (bpTimerSecondsLeft <= 0) {
+                    stopBpRelaxTimer(true);
+                }
+            }, 1000);
+        }
+
+        function updateBpTimerDisplay() {
+            const m = String(Math.floor(bpTimerSecondsLeft / 60)).padStart(2, '0');
+            const s = String(bpTimerSecondsLeft % 60).padStart(2, '0');
+            document.getElementById('bpTimerDisplay').textContent = `${m}:${s}`;
+        }
+
+        function stopBpRelaxTimer(completed = false) {
+            if (bpTimerInterval) clearInterval(bpTimerInterval);
+            bpTimerInterval = null;
+            document.getElementById('stopBpTimerBtn').classList.add('hidden');
+            document.getElementById('bpTimerCircle').classList.remove('breathe-anim');
+            if (completed) {
+                document.getElementById('bpTimerDisplay').textContent = 'OK!';
+                document.getElementById('bpTimerStatus').textContent = '✅ Riposo completato! Avvia ora il misuratore di pressione.';
+                playGentleAlarmSound();
+                showToast('Riposo completato! Puoi misurare la pressione ora.', false);
+            } else {
+                document.getElementById('bpTimerDisplay').textContent = '01:00';
+                document.getElementById('bpTimerStatus').textContent = 'Siediti comodo, piedi a terra, braccio appoggiato';
+            }
+        }
+
+        function toggleMultiBpCalc() {
+            document.getElementById('multiBpCalcBox').classList.toggle('hidden');
+        }
+
+        function computeMultiBpAverage() {
+            const s1 = parseInt(document.getElementById('m1Sys').value, 10);
+            const d1 = parseInt(document.getElementById('m1Dia').value, 10);
+            const s2 = parseInt(document.getElementById('m2Sys').value, 10);
+            const d2 = parseInt(document.getElementById('m2Dia').value, 10);
+            const s3 = parseInt(document.getElementById('m3Sys').value, 10);
+            const d3 = parseInt(document.getElementById('m3Dia').value, 10);
+
+            const sysArr = [s1, s2, s3].filter(v => !isNaN(v) && v >= 60);
+            const diaArr = [d1, d2, d3].filter(v => !isNaN(v) && v >= 30);
+
+            if (sysArr.length >= 2 && diaArr.length >= 2) {
+                const avgSys = Math.round(sysArr.reduce((a, b) => a + b, 0) / sysArr.length);
+                const avgDia = Math.round(diaArr.reduce((a, b) => a + b, 0) / diaArr.length);
+                document.getElementById('bpSysInput').value = avgSys;
+                document.getElementById('bpDiaInput').value = avgDia;
+                previewBpClassification();
+            }
+        }
+
+        function classifyBloodPressure(sys, dia) {
+            if (!sys || !dia || sys < 60 || dia < 30) return null;
+            if (sys >= 180 || dia >= 110) return { label: 'Ipertensione Grado 3', colorClass: 'bg-rose-100 text-rose-900 border-rose-300', dot: 'bg-rose-600' };
+            if (sys >= 160 || dia >= 100) return { label: 'Ipertensione Grado 2', colorClass: 'bg-rose-50 text-rose-800 border-rose-200', dot: 'bg-rose-500' };
+            if (sys >= 140 || dia >= 90) return { label: 'Ipertensione Grado 1', colorClass: 'bg-amber-100 text-amber-900 border-amber-300', dot: 'bg-amber-600' };
+            if (sys >= 130 || dia >= 85) return { label: 'Normale - Alta', colorClass: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' };
+            if (sys >= 120 || dia >= 80) return { label: 'Normale', colorClass: 'bg-emerald-50 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500' };
+            return { label: 'Ottimale (<120/80)', colorClass: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-600' };
+        }
+
+        function previewBpClassification() {
+            const sys = parseInt(document.getElementById('bpSysInput').value, 10);
+            const dia = parseInt(document.getElementById('bpDiaInput').value, 10);
+            const previewEl = document.getElementById('bpLivePreview');
+
+            const result = classifyBloodPressure(sys, dia);
+            if (!result) {
+                previewEl.className = 'p-3 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300';
+                previewEl.innerHTML = `<span>Inserisci Massima e Minima per la classificazione ESC/ESH</span>`;
+                return;
+            }
+
+            previewEl.className = `p-3 rounded-2xl border flex items-center justify-between text-xs font-extrabold ${result.colorClass}`;
+            previewEl.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full ${result.dot}"></span>
+                    <span>Classificazione ESC/ESH: ${result.label}</span>
+                </div>
+                <span>${sys}/${dia} mmHg</span>
+            `;
+        }
+
+        function saveBpReading() {
+            const sys = parseInt(document.getElementById('bpSysInput').value, 10);
+            const dia = parseInt(document.getElementById('bpDiaInput').value, 10);
+            const pulse = parseInt(document.getElementById('bpPulseInput').value, 10) || null;
+            const context = document.getElementById('bpContextSelect').value;
+
+            if (!sys || !dia || sys < 60 || dia < 30) {
+                showToast('Inserisci valori validi di pressione (es. 125 / 80)', false);
+                return;
+            }
+
+            const dayData = ensureDayRecord(selectedDateKey);
+            dayData.bpReadings.unshift({
+                id: 'bp_' + Date.now(),
+                sys,
+                dia,
+                pulse,
+                context,
+                time: new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+            });
+
+            document.getElementById('bpSysInput').value = '';
+            document.getElementById('bpDiaInput').value = '';
+            document.getElementById('bpPulseInput').value = '';
+            previewBpClassification();
+
+            saveState();
+            renderAll();
+            showToast(`Pressione ${sys}/${dia} mmHg registrata`, false);
+        }
+
+        function deleteBpReading(dateKey, bpId) {
+            const dayData = ensureDayRecord(dateKey);
+            dayData.bpReadings = dayData.bpReadings.filter(r => r.id !== bpId);
+            saveState();
+            renderAll();
+        }
+
+        function renderBpLogs() {
+            const container = document.getElementById('bpLogsContainer');
+            const keys = getLastNDaysKeys(7);
+            let rowsHtml = '';
+
+            keys.forEach(k => {
+                const dayData = appState.days[k];
+                if (!dayData || !dayData.bpReadings || dayData.bpReadings.length === 0) return;
+
+                dayData.bpReadings.forEach(r => {
+                    const cls = classifyBloodPressure(r.sys, r.dia) || { label: '', colorClass: 'bg-slate-100 text-slate-700' };
+                    rowsHtml += `
+                        <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-3">
+                                <div class="px-2.5 py-1.5 rounded-xl font-black text-sm border ${cls.colorClass}">
+                                    ${r.sys}/${r.dia}
+                                </div>
+                                <div>
+                                    <div class="text-xs font-extrabold text-slate-900 dark:text-white">
+                                        ${cls.label} ${r.pulse ? `<span class="text-slate-500 font-semibold">• ❤️ ${r.pulse} bpm</span>` : ''}
+                                    </div>
+                                    <div class="text-[11px] text-slate-500 dark:text-slate-400">
+                                        ${formatHumanDate(k)} ore ${r.time} • ${r.context}
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="deleteBpReading('${k}', '${r.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    `;
+                });
+            });
+
+            container.innerHTML = rowsHtml || `<p class="text-xs text-slate-400 py-4 text-center">Nessuna misurazione registrata negli ultimi 7 giorni.</p>`;
+            lucide.createIcons();
+        }
+
+        // ============================================================================
+        // 11. SWAPS & RESTAURANT MODE (TAB 4)
+        // ============================================================================
+        function renderSwapsAndRestaurant() {
+            const restGrid = document.getElementById('restaurantCardsGrid');
+            restGrid.innerHTML = RESTAURANT_PRESETS.map(r => {
+                const saved = +(r.standardSalt - r.smartSalt).toFixed(1);
+                return `
+                    <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-black text-slate-900 dark:text-white">${r.title}</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
+                                Risparmi ${saved}g di sale con la mossa furba
+                            </span>
+                        </div>
+                        <p class="text-xs text-amber-900 dark:text-amber-200 bg-amber-50/90 dark:bg-amber-950/60 p-2.5 rounded-xl border border-amber-200/70 dark:border-amber-800">
+                            💡 <strong>Trucco al tavolo:</strong> ${r.tip}
+                        </p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            <button onclick="addCustomEntryDirectly('${r.smartName.replace(/'/g, "\\'")}', '🥗', '1 pasto fuori furbo', ${r.smartSalt}); switchMainTab('oggi');" class="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center justify-between active:scale-95 transition">
+                                <span>✓ Registra Versione Furba</span>
+                                <span>+${r.smartSalt}g</span>
+                            </button>
+                            <button onclick="addCustomEntryDirectly('${r.standardName.replace(/'/g, "\\'")}', '🍽️', '1 pasto fuori completo', ${r.standardSalt}); switchMainTab('oggi');" class="py-2 px-3 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold flex items-center justify-between active:scale-95 transition">
+                                <span>Versione Standard</span>
+                                <span>+${r.standardSalt}g</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const swapsGrid = document.getElementById('smartSwapsGrid');
+            swapsGrid.innerHTML = SMART_SWAPS.map(s => {
+                const diff = +(s.highSalt - s.lowSalt).toFixed(2);
+                return `
+                    <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-xs font-bold text-rose-600 dark:text-rose-400 line-through">❌ ${s.highName} (${s.highSalt}g)</span>
+                            <span class="px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[11px] font-black shrink-0">
+                                -${diff}g sale!
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between gap-2">
+                            <div>
+                                <div class="text-xs sm:text-sm font-extrabold text-emerald-800 dark:text-emerald-300">
+                                    ✅ ${s.emoji} ${s.lowName} (${s.lowSalt}g)
+                                </div>
+                                <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">${s.reason}</div>
+                            </div>
+                            <button onclick="addCustomEntryDirectly('${s.lowName.replace(/'/g, "\\'")}', '${s.emoji}', '1 porzione sana', ${s.lowSalt}); switchMainTab('oggi');" class="shrink-0 px-3 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-extrabold active:scale-95 transition">
+                                + Diario
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ============================================================================
+        // 12. CUSTOM FAVORITE FOODS MODAL
+        // ============================================================================
+        function openCustomFoodModal() {
+            document.getElementById('newFoodName').value = '';
+            document.getElementById('newFoodPortion').value = '1 porzione';
+            document.getElementById('newFoodSalt').value = '';
+            document.getElementById('customFoodModal').classList.remove('hidden');
+        }
+
+        function closeCustomFoodModal() {
+            document.getElementById('customFoodModal').classList.add('hidden');
+        }
+
+        function selectNewFoodEmoji(emoji) {
+            appState.newFoodEmoji = emoji;
+            document.querySelectorAll('.emoji-opt').forEach(btn => {
+                if (btn.textContent === emoji) {
+                    btn.className = 'emoji-opt p-2 rounded-xl bg-sky-50 dark:bg-sky-950 text-base border-2 border-sky-500';
+                } else {
+                    btn.className = 'emoji-opt p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-base border-2 border-transparent';
+                }
+            });
+        }
+
+        function saveCustomFood() {
+            const name = document.getElementById('newFoodName').value.trim();
+            const portion = document.getElementById('newFoodPortion').value.trim() || '1 porzione';
+            const saltVal = parseFloat(document.getElementById('newFoodSalt').value);
+
+            if (!name || isNaN(saltVal) || saltVal < 0) {
+                showToast('Inserisci nome e grammi di sale validi', false);
+                return;
+            }
+
+            appState.customFoods.unshift({
+                id: 'cust_' + Date.now(),
+                name,
+                portion,
+                saltGrams: +saltVal.toFixed(2),
+                category: 'preferiti',
+                emoji: appState.newFoodEmoji || '⭐',
+                isCustom: true
+            });
+
+            appState.activeCategory = 'preferiti';
+            saveState();
+            closeCustomFoodModal();
+            renderCategoryPills();
+            renderFoodGrid();
+            showToast(`"${name}" salvato nella griglia 1-Tap!`, false);
+        }
+
+        // ============================================================================
+        // 13. 7-DAY HISTORY, CORRELATION CHART & DOCTOR REPORT (TAB 5)
+        // ============================================================================
+        function getLastNDaysKeys(n) {
+            const result = [];
+            const base = parseDateKey(getTodayDateKey());
+            for (let i = 0; i < n; i++) {
+                const d = new Date(base);
+                d.setDate(base.getDate() - i);
+                result.push(formatDateKey(d));
+            }
+            return result;
+        }
+
+        function renderHistoryAndDoctorReport() {
+            const keysChronological = getLastNDaysKeys(7).reverse();
+            const limit = appState.dailyLimitSaltGrams || 3.75;
+
+            let totalSalt7 = 0;
+            let daysWithFood = 0;
+            let daysMedTaken = 0;
+            let allSys = [];
+            let allDia = [];
+
+            const daySummaries = keysChronological.map(k => {
+                const d = ensureDayRecord(k);
+                const salt = +(d.entries || []).reduce((s, e) => s + e.saltGrams, 0).toFixed(2);
+                if (salt > 0 || k === getTodayDateKey()) {
+                    totalSalt7 += salt;
+                    daysWithFood++;
+                }
+                const medTaken = !!(d.medEveningTaken || d.medTaken);
+                if (medTaken) daysMedTaken++;
+
+                let avgSys = null;
+                let avgDia = null;
+                if (d.bpReadings && d.bpReadings.length > 0) {
+                    avgSys = Math.round(d.bpReadings.reduce((s, r) => s + r.sys, 0) / d.bpReadings.length);
+                    avgDia = Math.round(d.bpReadings.reduce((s, r) => s + r.dia, 0) / d.bpReadings.length);
+                    allSys.push(avgSys);
+                    allDia.push(avgDia);
+                }
+
+                return {
+                    dateKey: k,
+                    shortLabel: parseDateKey(k).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' }),
+                    salt,
+                    sodium: saltToSodiumMg(salt),
+                    avgSys,
+                    avgDia,
+                    medTaken,
+                    medEveningTime: d.medEveningTime || '',
+                    kCount: (d.potassiumItems || []).length
+                };
+            });
+
+            const meanSalt = daysWithFood > 0 ? +(totalSalt7 / daysWithFood).toFixed(2) : 0;
+            document.getElementById('avg7Salt').textContent = `${meanSalt.toFixed(2)} g`;
+            document.getElementById('avg7Sodium').textContent = `${saltToSodiumMg(meanSalt)} mg Na`;
+            document.getElementById('daysMedTaken7').textContent = `${daysMedTaken} / 7 💊`;
+
+            if (allSys.length > 0) {
+                const mSys = Math.round(allSys.reduce((a, b) => a + b, 0) / allSys.length);
+                const mDia = Math.round(allDia.reduce((a, b) => a + b, 0) / allDia.length);
+                document.getElementById('avg7Bp').textContent = `${mSys}/${mDia}`;
+            } else {
+                document.getElementById('avg7Bp').textContent = '-- / --';
+            }
+
+            const maxBarScale = Math.max(limit * 1.4, ...daySummaries.map(x => x.salt), 5);
+            const chartEl = document.getElementById('chart7DaysContainer');
+
+            chartEl.innerHTML = `
+                <div class="grid grid-cols-7 gap-1.5 sm:gap-2 items-end pt-4 pb-2 px-1 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700">
+                    ${daySummaries.map(item => {
+                        const heightPct = Math.min(100, Math.max(8, Math.round((item.salt / maxBarScale) * 100)));
+                        let barColor = 'bg-emerald-500';
+                        if (item.salt > limit) barColor = 'bg-rose-500';
+                        else if (item.salt >= limit * 0.6) barColor = 'bg-amber-500';
+
+                        const bpBadge = item.avgSys
+                            ? `<span class="px-1 py-0.5 rounded bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[9px] sm:text-[10px] font-extrabold">${item.avgSys}/${item.avgDia}</span>`
+                            : `<span class="text-[9px] text-slate-300 dark:text-slate-600 font-semibold">--/--</span>`;
+
+                        return `
+                            <div onclick="selectDateFromChart('${item.dateKey}')" class="flex flex-col items-center cursor-pointer group">
+                                <div class="mb-1.5">${bpBadge}</div>
+                                <div class="w-full max-w-[34px] h-28 bg-slate-200/70 dark:bg-slate-700 rounded-xl flex items-end p-0.5 relative overflow-hidden">
+                                    <div style="height: ${heightPct}%" class="w-full ${barColor} rounded-lg transition-all duration-300"></div>
+                                </div>
+                                <span class="text-[10px] font-extrabold text-slate-800 dark:text-slate-200 mt-1">${item.salt.toFixed(1)}g</span>
+                                <span class="text-[9px] mt-0.5">${item.medTaken ? '💊✓' : '⚪'}</span>
+                                <span class="text-[10px] font-medium text-slate-500 capitalize">${item.shortLabel}</span>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-slate-500 mt-2 px-1">
+                    <span>💡 Tocca un giorno per aprire quel diario (💊✓ = pastiglia sera presa).</span>
+                    <span class="font-bold">Limite: ${limit}g</span>
+                </div>
+            `;
+
+            const cfg = appState.medicationConfig;
+            const reportLines = [
+                `=== REPORT CLINICO SALEZERO / CARDIOSALT ===`,
+                `Data generazione: ${new Date().toLocaleDateString('it-IT')}`,
+                `Terapia Serale: ${cfg.eveningName} (${cfg.eveningDose}) ore ${cfg.eveningTime}`,
+                `Aderenza Terapia (ultimi 7gg): ${daysMedTaken}/7 giorni`,
+                `Obiettivo Giornaliero Sale: max ${limit}g (${saltToSodiumMg(limit)}mg Sodio)`,
+                `Media Consumo (ultimi 7gg): ${meanSalt.toFixed(2)}g Sale / ${saltToSodiumMg(meanSalt)}mg Sodio`,
+                `Pressione Media (7gg): ${allSys.length > 0 ? document.getElementById('avg7Bp').textContent + ' mmHg' : 'N/D'}`,
+                `--------------------------------------------`,
+                `DETTAGLIO GIORNALIERO (Ultimi 7 Giorni):`
+            ];
+
+            daySummaries.slice().reverse().forEach(d => {
+                const bpStr = d.avgSys ? `PA: ${d.avgSys}/${d.avgDia} mmHg` : `PA: non reg.`;
+                const medStr = d.medTaken ? `Pastiglia Sera: Sì (${d.medEveningTime || 'presa'})` : `Pastiglia Sera: No`;
+                reportLines.push(`• ${d.shortLabel}: Sale ${d.salt.toFixed(2)}g (${d.sodium}mg Na) | ${bpStr} | ${medStr} | Scudo K: ${d.kCount}/4`);
+            });
+
+            document.getElementById('doctorReportTextarea').value = reportLines.join('\n');
+        }
+
+        function selectDateFromChart(dateKey) {
+            selectedDateKey = dateKey;
+            ensureDayRecord(selectedDateKey);
+            renderAll();
+            switchMainTab('oggi');
+            showToast(`Diario del giorno: ${formatHumanDate(dateKey)}`, false);
+        }
+
+        function copyDoctorReport() {
+            const textarea = document.getElementById('doctorReportTextarea');
+            textarea.select();
+            textarea.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                showToast('Report per il medico copiato negli appunti!', false);
+            } catch (err) {
+                showToast('Seleziona il testo per copiarlo manualmente', false);
+            }
+        }
+
+        function loadDemoHistoryData() {
+            const keys = getLastNDaysKeys(7);
+            const demoSaltValues = [3.1, 2.8, 4.4, 3.5, 2.6, 4.8, 2.5];
+            const demoBpValues = [
+                { sys: 125, dia: 80, pulse: 67 },
+                { sys: 123, dia: 78, pulse: 65 },
+                { sys: 138, dia: 88, pulse: 74 },
+                { sys: 128, dia: 82, pulse: 69 },
+                { sys: 122, dia: 78, pulse: 64 },
+                { sys: 141, dia: 90, pulse: 76 },
+                { sys: 124, dia: 79, pulse: 66 }
+            ];
+
+            keys.forEach((k, idx) => {
+                const day = ensureDayRecord(k);
+                if (day.entries.length === 0) {
+                    day.entries.push({
+                        entryId: 'demo_' + idx,
+                        name: 'Pasti giornalieri registrati',
+                        emoji: '🍽️',
+                        meal: 'pranzo',
+                        portionLabel: 'Totale giornata',
+                        multiplier: 1,
+                        baseSaltGrams: demoSaltValues[idx],
+                        saltGrams: demoSaltValues[idx],
+                        timestamp: '13:00'
+                    });
+                }
+                if (day.bpReadings.length === 0) {
+                    day.bpReadings.push({
+                        id: 'demobp_' + idx,
+                        sys: demoBpValues[idx].sys,
+                        dia: demoBpValues[idx].dia,
+                        pulse: demoBpValues[idx].pulse,
+                        context: 'Sera pre-pastiglia',
+                        time: '21:30'
+                    });
+                }
+                day.medEveningTaken = true;
+                day.medTaken = true;
+                day.medEveningTime = '22:30';
+                day.potassiumItems = ['k_banana', 'k_spinaci', 'k_legumi'];
+            });
+
+            saveState();
+            renderAll();
+            showToast('Dati dimostrativi 7 giorni caricati!', false);
+        }
+
+        // ============================================================================
+        // 14. NAVIGATION, TOAST & INITIALIZATION
+        // ============================================================================
+        function switchMainTab(tabName) {
+            ['oggi', 'etichetta', 'pressione', 'swaps', 'storico'].forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                if (el) el.classList.toggle('hidden', t !== tabName);
+            });
+
+            document.querySelectorAll('.nav-tab-btn').forEach(btn => {
+                const isCurrent = btn.getAttribute('data-tab') === tabName;
+                if (isCurrent) {
+                    btn.className = 'nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-2xl text-sky-600 dark:text-sky-400 font-extrabold transition active:scale-95 bg-sky-50/70 dark:bg-sky-950/60';
+                } else {
+                    btn.className = 'nav-tab-btn flex flex-col items-center justify-center py-1.5 rounded-2xl text-slate-500 dark:text-slate-400 font-semibold transition active:scale-95 hover:text-slate-800';
+                }
+            });
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            renderAll();
+        }
+
+        function showToast(message, showUndoBtn = false) {
+            const banner = document.getElementById('toastBanner');
+            document.getElementById('toastMessage').textContent = message;
+            document.getElementById('toastUndoBtn').classList.toggle('hidden', !showUndoBtn);
+            banner.classList.remove('hidden');
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                banner.classList.add('hidden');
+            }, 4000);
+        }
+
+        function renderAll() {
+            renderTherapyCard();
+            renderDashboard();
+            renderPotassiumShield();
+            renderMealAndPortionSelectors();
+            renderCategoryPills();
+            renderFoodGrid();
+            renderDiary();
+            renderBpLogs();
+            renderSwapsAndRestaurant();
+            renderHistoryAndDoctorReport();
+            lucide.createIcons();
+        }
+
+        window.onload = function () {
+            setupPwaEnvironment();
+            loadState();
+            renderAll();
+            calculateFromLabel();
+            checkBedtimePillReminder();
+
+            // Check bedtime pill reminder every 20 seconds and whenever phone screen wakes up
+            setInterval(checkBedtimePillReminder, 20000);
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) checkBedtimePillReminder();
+            });
+        };
+    </script>
+</body>
+</html>
